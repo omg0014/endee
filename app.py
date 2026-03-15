@@ -272,7 +272,7 @@ def delete_file_from_endee(filename):
 # ---------------------------------------------------------
 # Main UI
 # ---------------------------------------------------------
-st.title("🤖 Gemini AI RAG + Endee Vector DB")
+st.title("🤖 Gemini AI PDF Search + Endee Vector DB")
 
 # Connection Status (Error only)
 if "Error" in init_status:
@@ -282,10 +282,10 @@ if "Error" in init_status:
 tab1, tab2 = st.tabs(["Search & Chat", "Upload Data"])
 
 with tab2:
-    st.markdown("### Upload Documents & Images")
-    st.write("Upload PDFs, PNGs, and JPGs. They will be embedded via the **Gemini API** and stored inside **Endee**.")
+    st.markdown("### Upload PDF Documents")
+    st.write("Upload PDF files. They will be embedded via the **Gemini API** and stored inside **Endee**.")
     
-    uploaded_files = st.file_uploader("Choose files", accept_multiple_files=True, type=['pdf', 'png', 'jpg', 'jpeg'])
+    uploaded_files = st.file_uploader("Choose PDF files", accept_multiple_files=True, type=['pdf'])
     
     if st.button("Ingest into Endee", type="primary"):
         if not uploaded_files:
