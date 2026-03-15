@@ -16,8 +16,8 @@ import tempfile
 GEMINI_API_KEY = "AIzaSyBK4O8z6zvBjA4TtXURDcXQumGa9UeNTHw"
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Endee configuration
-ENDEE_URL = "http://localhost:8080"
+# Default Endee configuration
+DEFAULT_ENDEE_URL = "http://localhost:8080"
 INDEX_NAME = "gemini_semantic_search_v2"
 DIMENSION = 3072  # GEMINI gemini-embedding-001 dimension
 SPACE_TYPE = "cosine"
@@ -192,6 +192,21 @@ if "Error" in init_status:
     st.error(init_status)
     st.info("Please start the Endee server on port 8080 and refresh.")
     st.stop()
+
+# Sidebar for Configuration
+st.sidebar.title("⚙️ Configuration")
+st.sidebar.markdown("### Database Settings")
+ENDEE_URL = st.sidebar.text_input("Endee Server URL", value=DEFAULT_ENDEE_URL, help="Change this if your Endee server is running on a different port or a public tunnel.")
+
+if st.sidebar.button("Refresh Connection"):
+    st.cache_resource.clear()
+    st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.info("""
+**Cloud Deployment Tip:**
+If deploying to Streamlit Cloud, use a public tunnel (like localtunnel) to expose your local Endee instance and paste the URL here.
+""")
 
 tab1, tab2 = st.tabs(["Search & Chat", "Upload Data"])
 

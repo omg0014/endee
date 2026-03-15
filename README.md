@@ -126,3 +126,21 @@ Image Description:
 
 ==================================================
 ```
+
+## ☁️ Deploying to Streamlit Cloud
+
+If you wish to deploy this interface to **Streamlit Cloud**, follow these steps:
+
+1. **Push to GitHub**: Ensure your latest code is pushed to your repository.
+2. **Expose Endee Locally**: Since Streamlit Cloud cannot access your `localhost`, you must expose your local Endee instance to the internet. Run:
+   ```bash
+   npx localtunnel --port 8080
+   ```
+   *Note: This will provide a public URL like `https://funny-cats-split.loca.lt`.*
+3. **Connect the App**:
+   - Deploy your app on the Streamlit Cloud dashboard.
+   - Once live, open the **⚙️ Configuration** sidebar in your app.
+   - Paste your **Localtunnel URL** into the "Endee Server URL" field.
+   - Click **Refresh Connection**.
+
+Now your cloud-hosted app can securely communicate with your local vector database!
