@@ -49,6 +49,25 @@ def init_endee(index_name, dimension):
     except requests.exceptions.ConnectionError:
         return f"Error: Could not connect to Endee at {ENDEE_URL}."
 
+# Sidebar for Configuration
+st.sidebar.title("⚙️ Configuration")
+st.sidebar.markdown("### Database Settings")
+ENDEE_URL = st.sidebar.text_input(
+    "Endee Server URL", 
+    value=DEFAULT_ENDEE_URL, 
+    help="Change this to your Localtunnel URL (e.g., https://...loca.lt) if deploying to Streamlit Cloud."
+)
+
+if st.sidebar.button("Test & Refresh Connection"):
+    st.cache_resource.clear()
+    st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.info("""
+**Cloud Deployment Tip:**
+If deploying to Streamlit Cloud, use a public tunnel (like localtunnel) on your local machine to expose Endee, then paste the URL above.
+""")
+
 init_status = init_endee(INDEX_NAME, DIMENSION)
 
 # Main state for tracking ingested files and their vectors
@@ -189,24 +208,10 @@ def delete_file_from_endee(filename):
 st.title("🤖 Gemini AI RAG + Endee Vector DB")
 
 if "Error" in init_status:
+    st.sidebar.error("❌ Connection Failed")
     st.error(init_status)
-    st.info("Please start the Endee server on port 8080 and refresh.")
-    st.stop()
-
-# Sidebar for Configuration
-st.sidebar.title("⚙️ Configuration")
-st.sidebar.markdown("### Database Settings")
-ENDEE_URL = st.sidebar.text_input("Endee Server URL", value=DEFAULT_ENDEE_URL, help="Change this if your Endee server is running on a different port or a public tunnel.")
-
-if st.sidebar.button("Refresh Connection"):
-    st.cache_resource.clear()
-    st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.info("""
-**Cloud Deployment Tip:**
-If deploying to Streamlit Cloud, use a public tunnel (like localtunnel) to expose your local Endee instance and paste the URL here.
-""")
+    st.warning("Please check if your Endee server is running. If you are on Streamlit Cloud, provide your public tunnel URL in the sidebar.")
+    st.stop() if not ENDEE_URL else None # Only stop if no URL is provided, but we want the UI to exist
 
 tab1, tab2 = st.tabs(["Search & Chat", "Upload Data"])
 
