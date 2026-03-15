@@ -97,7 +97,12 @@ def get_embedding(text):
         )
         return response['embedding']
     except Exception as e:
-        st.error(f"Error generating embedding: {e}")
+        err_msg = str(e)
+        if "leaked" in err_msg.lower():
+            st.error("🚨 **API KEY REVOKED**: Google has disabled your key because it was leaked on GitHub.")
+            st.markdown("1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey)\n2. Generate a **New API Key**\n3. Update your **Secrets/Environment Variables**.")
+        else:
+            st.error(f"Error generating embedding: {e}")
         return None
 
 def analyze_image_with_gemini(image_path):
@@ -130,7 +135,11 @@ User Question: {query}
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        st.error(f"Error in RAG reasoning: {e}")
+        err_msg = str(e)
+        if "leaked" in err_msg.lower():
+            st.error("🚨 **API KEY REVOKED**: Cannot generate response. Please rotate your API key in Google AI Studio.")
+        else:
+            st.error(f"Error in RAG reasoning: {e}")
         return "Sorry, there was an error generating the RAG response."
 
 
