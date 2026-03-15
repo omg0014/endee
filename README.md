@@ -1,139 +1,128 @@
-<p align="center">
-  <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-      <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo-light.svg">
-      <img height="100" alt="Endee" src="docs/assets/logo-dark.svg">
-  </picture>
-</p>
+# AI Semantic Search for PDFs and Images using Endee Vector Database
 
-<p align="center">
-    <b>High-performance open-source vector database for AI search, RAG, semantic search, and hybrid retrieval.</b>
-</p>
+## Project Overview
 
-<p align="center">
-    <a href="./docs/getting-started.md"><img src="https://img.shields.io/badge/Quick_Start-Local_Setup-success?style=flat-square" alt="Quick Start"></a>
-    <a href="https://docs.endee.io/quick-start"><img src="https://img.shields.io/badge/Docs-Quick_Start-success?style=flat-square" alt="Docs"></a>
-    <a href="https://github.com/endee-io/endee/blob/master/LICENSE"><img src="https://img.shields.io/github/license/endee-io/endee?style=flat-square" alt="License"></a>
-    <a href="https://discord.gg/5HFGqDZQE3"><img src="https://img.shields.io/badge/Discord-Join_Chat-5865F2?logo=discord&style=flat-square" alt="Discord"></a>
-    <a href="https://endee.io/"><img src="https://img.shields.io/badge/Website-Endee-111111?style=flat-square" alt="Website"></a>
-    <!-- <a href="https://endee.io/benchmarks"><img src="https://img.shields.io/badge/Benchmarks-Coming_Soon-1F8B4C?style=flat-square" alt="Benchmarks"></a> -->
-    <!-- <a href="https://endee.io/cloud"><img src="https://img.shields.io/badge/Cloud-Coming_Soon-2496ED?style=flat-square" alt="Cloud"></a> -->
-</p>
+Traditional keyword search fails to understand context and meaning—it only looks for exact word matches. **Semantic search** overcomes this by retrieving results based on the *meaning* of the queries and documents using dense vector embeddings.
 
-<p align="center">
-<strong><a href="./docs/getting-started.md">Quick Start</a> • <a href="#why-endee">Why Endee</a> • <a href="#use-cases">Use Cases</a> • <a href="#features">Features</a> • <a href="#api-and-clients">API and Clients</a> • <a href="#docs-and-links">Docs</a> • <a href="#community-and-contact">Contact</a></strong>
-</p>
+This project implements a professional, clean, and beginner-friendly AI Semantic Search system. It allows users to search for information across both **PDF documents** and **Images** using natural language queries seamlessly. 
 
-# Endee: Open-Source Vector Database for AI Search
+The system relies heavily on the **Endee Vector Database** for lightning-fast similarity search of the high-dimensional embeddings.
 
-**Endee** is a high-performance open-source vector database built for AI search and retrieval workloads. It is designed for teams building **RAG pipelines**, **semantic search**, **hybrid search**, recommendation systems, and filtered vector retrieval APIs that need production-oriented performance and control.
+## Problem Statement
 
-Endee combines vector search with filtering, sparse retrieval support, backup workflows, and deployment flexibility across local builds and Docker-based environments. The project is implemented in C++ and optimized for modern CPU targets, including AVX2, AVX512, NEON, and SVE2.
+Traditional search systems break when users use synonyms or describe concepts instead of using exact keywords. Furthermore, searching across multimodal data (like texts and images simultaneously) is difficult using traditional full-text engines.
 
-If you want the fastest path to evaluate Endee locally, start with the [Getting Started guide](./docs/getting-started.md) or the hosted docs at [docs.endee.io](https://docs.endee.io/quick-start).
+Semantic search solves this by:
+1. Converting text and image content into mathematical arrays (vector embeddings) where semantically similar concepts are closer together.
+2. Converting the user's natural language query into the same vector space.
+3. Rapidly retrieving the closest vectors using a vector database.
 
-## Why Endee
+## System Architecture
 
-- Built as a dedicated vector database for AI applications, search systems, and retrieval-heavy workloads.
-- Supports dense vector retrieval plus sparse search capabilities for hybrid search use cases.
-- Includes payload filtering for metadata-aware retrieval and application-specific query logic.
-- Ships with operational features already documented in this repo, including backup flows and runtime observability.
-- Offers flexible deployment paths: local scripts, manual builds, Docker images, and prebuilt registry images.
+The pipeline consists of three separate steps: extracting and embedding PDFs, extracting and embedding images, and searching. All components map to the same vector dimension (`384`) using the `all-MiniLM-L6-v2` transformer model so they can be queried simultaneously.
 
-## Getting Started
-
-The full installation, build, Docker, runtime, and authentication instructions are in [docs/getting-started.md](./docs/getting-started.md).
-
-Fastest local path:
-
-```bash
-chmod +x ./install.sh ./run.sh
-./install.sh --release --avx2
-./run.sh
+```
+PDF / Image Files
+       ↓
+Text Extraction (PyMuPDF) / Image Captioning (BLIP)
+       ↓
+Embedding Model (all-MiniLM-L6-v2)
+       ↓
+Store embeddings in Endee Vector Database
+       ↓
+User Query ("neural networks")
+       ↓
+Query Embedding (all-MiniLM-L6-v2)
+       ↓
+Vector Similarity Search in Endee
+       ↓
+Return Most Relevant Results
 ```
 
-The server listens on port `8080`. For detailed setup paths, supported operating systems, CPU optimization flags, Docker usage, and authentication examples, use:
+## How Endee is Used
 
-- [Getting Started](./docs/getting-started.md)
-- [Hosted Quick Start Docs](https://docs.endee.io/quick-start)
+**Endee** is an open-source, high-performance vector database. In this project:
+- We create a unified space (`semantic_search`) using the `cosine` distance metric.
+- Endee stores our highly dense `384-dimensional` vector embeddings.
+- Endee's HTTP REST API allows us to easily create indexes, insert vectors, and perform nearest-neighbor searches at scale.
+- We leverage Endee's `meta` payload capability to seamlessly store the corresponding text chunks and image captions as stringified JSON directly alongside the vectors. This prevents the need for a secondary relational database to fetch document text.
 
-## Use Cases
+## Setup Instructions
 
-### RAG and AI Retrieval
+### Step 1: Clone Repository
 
-Use Endee as the retrieval layer for question answering, chat assistants, copilots, and other RAG applications that need fast vector search with metadata-aware filtering.
+```bash
+git clone https://github.com/omg0014/endee.git
+cd endee
+```
 
-### Agentic AI and AI Agent Memory
+### Step 2: Install Dependencies
 
-Use Endee as the long-term memory and context retrieval layer for AI agents built with frameworks like LangChain, CrewAI, AutoGen, and LlamaIndex. Store and retrieve past observations, tool outputs, conversation history, and domain knowledge mid-execution with low-latency filtered vector search, so your autonomous agents get the right context without stalling their reasoning loop.
+We recommend using a python virtual environment:
 
-### Semantic Search
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-Build semantic search experiences for documents, products, support content, and knowledge bases using vector similarity search instead of exact keyword-only matching.
+### Step 3: Start Endee Vector Database
 
-### Hybrid Search
+Ensure Docker is installed, then start Endee on `localhost:8080`:
 
-Combine dense retrieval, sparse vectors, and filtering to improve relevance for search workflows where both semantic understanding and term-level precision matter.
+```bash
+docker run \
+  --ulimit nofile=100000:100000 \
+  -p 8080:8080 \
+  -v ./endee-data:/data \
+  --name endee-server \
+  --restart unless-stopped \
+  endeeio/endee-server:latest
+```
 
-### Recommendations and Matching
+*Alternatively, you can build it locally from the `endee` repository source.*
 
-Support recommendation, similarity matching, and nearest-neighbor retrieval workflows across text, embeddings, and other high-dimensional representations.
+### Step 4: Add Data
 
-## Features
+1. Place any PDF files you want to search through into the `data/pdfs/` directory.
+2. Place any Images (jpg, png) you want to search through into the `data/images/` directory.
 
-- **Vector search** for AI retrieval and semantic similarity workloads.
-- **Hybrid retrieval support** with sparse vector capabilities documented in [docs/sparse.md](./docs/sparse.md).
-- **Payload filtering** for structured retrieval logic documented in [docs/filter.md](./docs/filter.md).
-- **Backup APIs and flows** documented in [docs/backup-system.md](./docs/backup-system.md).
-- **Operational logging and instrumentation** documented in [docs/logs.md](./docs/logs.md) and [docs/mdbx-instrumentation.md](./docs/mdbx-instrumentation.md).
-- **CPU-targeted builds** for AVX2, AVX512, NEON, and SVE2 deployments.
-- **Docker deployment options** for local and server environments.
+### Step 5: Run Ingestion
 
-## API and Clients
+Run the ingestion scripts to extract text/captions, generate embeddings, and store them into Endee:
 
-Endee exposes an HTTP API for managing indexes and serving retrieval workloads. The current repo documentation and examples focus on running the server directly and calling its API endpoints.
+```bash
+python ingest_pdf.py
+python ingest_images.py
+```
 
-Current developer entry points:
+### Step 6: Run Semantic Search
 
-- [Getting Started](./docs/getting-started.md) for local build and run flows
-- [Hosted Docs](https://docs.endee.io/quick-start) for product documentation
-- [Release Notes 1.0.0](https://github.com/endee-io/endee/releases/tag/1.0.0) for recent platform changes
+Interact with the database using natural language queries:
 
-## Docs and Links
+```bash
+python search.py
+```
 
-- [Getting Started](./docs/getting-started.md)
-- [Hosted Documentation](https://docs.endee.io/quick-start)
-- [Release Notes](https://github.com/endee-io/endee/releases/tag/1.0.0)
-- [Sparse Search](./docs/sparse.md)
-- [Filtering](./docs/filter.md)
-- [Backups](./docs/backup-system.md)
+## Example Query
 
-## Community and Contact
+**Enter query:** `"deep learning"`
 
-- Join the community on [Discord](https://discord.gg/5HFGqDZQE3)
-- Visit the website at [endee.io](https://endee.io/)
-- For trademark or branding permissions, contact [enterprise@endee.io](mailto:enterprise@endee.io)
+**Expected output:**
+```
+==================================================
+RESULTS FOR: 'deep learning'
+==================================================
 
-## Contributing
+--- Result 1 (Score: 0.7412) ---
+Found in PDF document: ai_notes.pdf
+Relevant chunk:
+"Deep learning is a subset of machine learning that uses multi-layered artificial neural networks to deliver state-of-the-art accuracy in tasks such as object detection, speech recognition, and language translation."
 
-We welcome contributions from the community to help make vector search faster and more accessible for everyone.
+--- Result 2 (Score: 0.6120) ---
+Found matching Image: neural_network_diagram.jpg
+Image Description:
+"a diagram showing a deep neural network with input, hidden, and output layers"
 
-- Submit pull requests for fixes, features, and improvements
-- Report bugs or performance issues through GitHub issues
-- Propose enhancements for search quality, performance, and deployment workflows
-
-## License
-
-Endee is open source software licensed under the **Apache License 2.0**. See the [LICENSE](./LICENSE) file for full terms.
-
-## Trademark and Branding
-
-“Endee” and the Endee logo are trademarks of Endee Labs.
-
-The Apache License 2.0 does not grant permission to use the Endee name, logos, or branding in a way that suggests endorsement or affiliation.
-
-If you offer a hosted or managed service based on this software, you must use your own branding and avoid implying it is an official Endee service.
-
-## Third-Party Software
-
-This project includes or depends on third-party software components licensed under their respective open-source licenses. Use of those components is governed by their own license terms.
+==================================================
+```
