@@ -1,158 +1,89 @@
-# 🤖 AI Semantic Search (Endee + Gemini)
+# 🤖 Gemini AI PDF Search (Endee + Gemini)
 
-> [!CAUTION]
-> **API KEY LEAKED?** If you see a `403 Your API key was reported as leaked` error, it means Google has disabled your key because it was detected in a public repository.
-> 
-> **To fix this:**
-> 1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey).
-> 2. Delete the old key and **Create a New API Key**.
-> 3. Update your **Streamlit Cloud Secrets** with the new key (`GEMINI_API_KEY = "your-new-key"`).
-> 4. Update your local `.env` file with the new key.
+> [!IMPORTANT]
+> This project has been upgraded to **Gemini 2.0 Flash** and is now specialized for **PDF Document Intelligence**.
 
-## Project Overview
+## 📖 Project Overview & Problem Statement
 
-Traditional keyword search fails to understand context and meaning—it only looks for exact word matches. **Semantic search** overcomes this by retrieving results based on the *meaning* of the queries and documents using dense vector embeddings.
+### The Problem
+Traditional keyword search is "literal"—it looks for exact word matches. If you search for "security," you might miss documents about "authentication" or "access control." Furthermore, searching through hundreds of pages of unstructured PDF data is slow and manual.
 
-This project implements a professional, clean, and beginner-friendly AI Semantic Search system. It allows users to search for information across both **PDF documents** and **Images** using natural language queries seamlessly. 
+### The Solution: Semantic Search
+This project implements a professional **Semantic Search** system. Instead of matching words, it matches **meanings**. By converting PDF text into high-dimensional vectors (embeddings) and storing them in the **Endee Vector Database**, we can retrieve relevant information based on conceptual similarity.
 
-The system relies heavily on the **Endee Vector Database** for lightning-fast similarity search of the high-dimensional embeddings.
+- **Multimodal Reasoning**: Uses Gemini 2.0 to not just find text, but reason about it.
+- **Natural Language Querying**: Ask questions like "How do I reset my password?" and get the exact paragraph from your PDFs.
+- **RAG (Retrieval-Augmented Generation)**: Answers are generated using the retrieved context, ensuring accuracy and citing sources.
 
-## Problem Statement
+---
 
-Traditional search systems break when users use synonyms or describe concepts instead of using exact keywords. Furthermore, searching across multimodal data (like texts and images simultaneously) is difficult using traditional full-text engines.
+## 🏗️ System Design & Technical Approach
 
-Semantic search solves this by:
-1. Converting text and image content into mathematical arrays (vector embeddings) where semantically similar concepts are closer together.
-2. Converting the user's natural language query into the same vector space.
-3. Rapidly retrieving the closest vectors using a vector database.
+The pipeline follows a modern **Retrieval-Augmented Generation (RAG)** architecture:
 
-## System Architecture
+1.  **Ingestion Phase**:
+    - **Extraction**: PDF text is parsed using `PyMuPDF`.
+    -  **Chunking**: Text is split into overlapping windows to preserve context.
+    -  **Embedding**: Chunks are sent to Gemini's `models/gemini-embedding-001` to generate 3072-dimensional vectors.
+    -  **Storage**: Vectors and original text metadata are committed to **Endee**.
 
-The pipeline consists of three separate steps: extracting and embedding PDFs, extracting and embedding images, and searching. All components map to the same vector dimension (`384`) using the `all-MiniLM-L6-v2` transformer model so they can be queried simultaneously.
+2.  **Retrieval & Reasoning Phase**:
+    - **Query Embedding**: The user's query is converted into a vector.
+    - **Vector Search**: Endee performs a `cosine` similarity scan to find the top $K$ most relevant chunks.
+    - **RAG Synthesis**: The context chunks + user query are sent to **Gemini 2.0 Flash** to generate a final, human-friendly answer.
 
-```
-PDF / Image Files
-       ↓
-Text Extraction (PyMuPDF) / Image Captioning (BLIP)
-       ↓
-Embedding Model (all-MiniLM-L6-v2)
-       ↓
-Store embeddings in Endee Vector Database
-       ↓
-User Query ("neural networks")
-       ↓
-Query Embedding (all-MiniLM-L6-v2)
-       ↓
-Vector Similarity Search in Endee
-       ↓
-Return Most Relevant Results
-```
+---
 
-## How Endee is Used
+## 💾 How Endee is Used
 
-**Endee** is an open-source, high-performance vector database. In this project:
-- We create a unified space (`semantic_search`) using the `cosine` distance metric.
-- Endee stores our highly dense `384-dimensional` vector embeddings.
-- Endee's HTTP REST API allows us to easily create indexes, insert vectors, and perform nearest-neighbor searches at scale.
-- We leverage Endee's `meta` payload capability to seamlessly store the corresponding text chunks and image captions as stringified JSON directly alongside the vectors. This prevents the need for a secondary relational database to fetch document text.
+**Endee** is the high-performance engine at the heart of this project. It serves as our **Vector Database**:
 
-## Setup Instructions
+- **Unified Indexing**: We use a specialized index (`gemini_semantic_search_v3`) with `int8` precision for high-speed retrieval.
+- **Metadata Payloads**: Unlike traditional databases that require a separate SQL store, Endee allows us to store the **original text chunks** and **filenames** directly inside the vector payload.
+- **Scalability**: Endee's C++ core allows it to handle the large 3072-dimensional Gemini vectors with sub-millisecond latency.
+- **Cloud Stability**: Our implementation includes automated retries and normalized URL handling to ensure stable communication between cloud-hosted Streamlit and Endee.
 
-### Step 1: Clone Repository
+---
 
+## 🚀 Setup & Execution 
+
+### 1. Prerequisites
+- Docker (to run Endee)
+- Python 3.10+
+- [Google AI Studio API Key](https://aistudio.google.com/app/apikey)
+
+### 2. Install Dependencies
 ```bash
 git clone https://github.com/omg0014/endee.git
 cd endee
-```
-
-### Step 2: Install Dependencies
-
-We recommend using a python virtual environment:
-
-```bash
-python -m venv venv
-source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Step 3: Start Endee Vector Database
+### 3. Initialize Environment
+Create a `.env` file in the root directory:
+```env
+GEMINI_API_KEY=your_key_here
+ENDEE_URL=http://localhost:8080
+```
 
-Ensure Docker is installed, then start Endee on `localhost:8080`:
-
+### 4. Start Endee
 ```bash
-docker run \
-  --ulimit nofile=100000:100000 \
-  -p 8080:8080 \
-  -v ./endee-data:/data \
-  --name endee-server \
-  --restart unless-stopped \
-  endeeio/endee-server:latest
+docker run -p 8080:8080 -v ./data:/data endeeio/endee-server:latest
 ```
 
-*Alternatively, you can build it locally from the `endee` repository source.*
-
-### Step 4: Add Data
-
-1. Place any PDF files you want to search through into the `data/pdfs/` directory.
-2. Place any Images (jpg, png) you want to search through into the `data/images/` directory.
-
-### Step 5: Run Ingestion
-
-Run the ingestion scripts to extract text/captions, generate embeddings, and store them into Endee:
-
+### 5. Run the Application
 ```bash
-python ingest_pdf.py
-python ingest_images.py
+streamlit run app.py
 ```
 
-### Step 6: Run Semantic Search
+---
 
-Interact with the database using natural language queries:
+## ☁️ Deployment
 
-```bash
-python search.py
-```
+### Streamlit Cloud
+1. Push this repo to GitHub.
+2. Deploy on Streamlit Cloud and add `GEMINI_API_KEY` and `ENDEE_URL` to **Secrets**.
+3. Use the provided `tunnel.sh` or a [Render.com](render_deployment_guide.md) instance for the database.
 
-## Example Query
-
-**Enter query:** `"deep learning"`
-
-**Expected output:**
-```
-==================================================
-RESULTS FOR: 'deep learning'
-==================================================
-
---- Result 1 (Score: 0.7412) ---
-Found in PDF document: ai_notes.pdf
-Relevant chunk:
-"Deep learning is a subset of machine learning that uses multi-layered artificial neural networks to deliver state-of-the-art accuracy in tasks such as object detection, speech recognition, and language translation."
-
---- Result 2 (Score: 0.6120) ---
-Found matching Image: neural_network_diagram.jpg
-Image Description:
-"a diagram showing a deep neural network with input, hidden, and output layers"
-
-==================================================
-```
-
-## ☁️ Deploying to Streamlit Cloud
-
-If you wish to deploy this interface to **Streamlit Cloud**, follow these steps:
-
-1. **Push to GitHub**: Ensure your latest code is pushed to your repository.
-2. **Expose Endee Locally**: Since Streamlit Cloud cannot access your `localhost`, you must expose your local Endee instance to the internet. Run:
-   ```bash
-   npx localtunnel --port 8080
-   ```
-   *Note: This will provide a public URL like `https://funny-cats-split.loca.lt`.*
-3. **Connect the App**:
-   - Deploy your app on the Streamlit Cloud dashboard.
-   - Go to **Settings** > **Secrets** in the Streamlit Cloud dashboard.
-   - Add your **Localtunnel URL** like this:
-     ```toml
-     ENDEE_URL = "https://your-tunnel-url.loca.lt"
-     ```
-   - Save the secrets and your app will automatically reconnect.
-
-Now your cloud-hosted app can securely communicate with your local vector database without any extra UI clutter!
+### Render.com
+For 24/7 public hosting of your database, follow our [Render Deployment Guide](render_deployment_guide.md).
