@@ -24,10 +24,7 @@ if not GEMINI_API_KEY:
     st.error("❌ **GEMINI_API_KEY Missing**: Please set your API key in Streamlit Secrets (Cloud) or `.env` (Local).")
     st.stop()
 
-# Display masked key for debugging
-masked_key = f"{GEMINI_API_KEY[:6]}...{GEMINI_API_KEY[-4:]}" if len(GEMINI_API_KEY) > 10 else "****"
-st.sidebar.text(f"🔑 Key: {masked_key}")
-
+# genai configuration
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Endee configuration
@@ -78,33 +75,11 @@ def init_endee(index_name, dimension):
     except requests.exceptions.ConnectionError:
         return f"Error: Could not connect to Endee at {ENDEE_URL}."
 
-# Initial UI feedback so user knows it's not "stuck"
+# Initial database setup (background)
 with st.sidebar:
-    st.info("🚀 App Initializing...")
     init_status = init_endee(INDEX_NAME, DIMENSION)
-    
-    st.markdown("---")
-    st.subheader("🛠️ Database Tools")
-    if st.button("🗑️ Deep Reset Index", help="Deletes current index and recreates it. Use if you see 'Required files missing' errors."):
-        with st.spinner("Resetting..."):
-            try:
-                # Delete
-                del_url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete"
-                requests.delete(del_url, headers=HEADERS, timeout=15)
-                # Clear Cache
-                st.cache_resource.clear()
-                st.write("Index wiped. Re-initializing...")
-                # Re-init
-                init_endee(INDEX_NAME, DIMENSION)
-                st.success("✅ Database Hard Reset Complete!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Failed to reset: {e}")
-
     if "Error" in init_status:
         st.error(init_status)
-    else:
-        st.success("✅ Database Ready")
 
 # Main state for tracking ingested files and their vectors
 if 'ingested_files' not in st.session_state:
