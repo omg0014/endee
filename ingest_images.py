@@ -5,9 +5,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
-ENDEE_URL = os.getenv("ENDEE_URL", "http://localhost:8080")
+ENDEE_URL = os.getenv("ENDEE_URL", "http://localhost:8080").rstrip("/")
+if ENDEE_URL.endswith("/api/v1"):
+    ENDEE_URL = ENDEE_URL[:-7]
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-INDEX_NAME = "gemini_semantic_search_v2"
+INDEX_NAME = "gemini_semantic_search_v3"
 DIMENSION = 3072
 SPACE_TYPE = "cosine"
 IMAGE_DIR = "data/images"
