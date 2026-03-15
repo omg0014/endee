@@ -82,6 +82,25 @@ def init_endee(index_name, dimension):
 with st.sidebar:
     st.info("🚀 App Initializing...")
     init_status = init_endee(INDEX_NAME, DIMENSION)
+    
+    st.markdown("---")
+    st.subheader("🛠️ Database Tools")
+    if st.button("🗑️ Deep Reset Index", help="Deletes current index and recreates it. Use if you see 'Required files missing' errors."):
+        with st.spinner("Resetting..."):
+            try:
+                # Delete
+                del_url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete"
+                requests.delete(del_url, headers=HEADERS, timeout=15)
+                # Clear Cache
+                st.cache_resource.clear()
+                st.write("Index wiped. Re-initializing...")
+                # Re-init
+                init_endee(INDEX_NAME, DIMENSION)
+                st.success("✅ Database Hard Reset Complete!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to reset: {e}")
+
     if "Error" in init_status:
         st.error(init_status)
     else:
@@ -224,6 +243,10 @@ def ingest_to_endee(embeddings, payloads, filename):
             else:
                 # Show full error body and the URL for 404/500 errors to help debugging
                 st.error(f"Endee Server Error ({response.status_code})")
+                
+                if "Required files missing" in response.text:
+                    st.warning("💡 **Fix Detected**: Your database files are missing. Please click **🗑️ Deep Reset Index** in the sidebar to recreate the index.")
+                
                 st.info(f"Target URL: `{url}`")
                 st.write(f"Server Response: {response.text}")
                 
