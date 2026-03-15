@@ -1,5 +1,7 @@
 # 🤖 Gemini AI PDF Search (Endee + Gemini)
 
+**🌐 Live Demo**: [omg0014-endee-app-ilerkr.streamlit.app](https://omg0014-endee-app-ilerkr.streamlit.app/)
+
 > [!IMPORTANT]
 > This project has been upgraded to **Gemini 2.0 Flash** and is now specialized for **PDF Document Intelligence**.
 
