@@ -50,17 +50,27 @@ def init_endee(index_name, dimension):
         "precision": "float32"
     }
     try:
-        response = requests.post(url, json=payload, headers=HEADERS)
+        # Added 5s timeout to prevent hanging on slow/broken localtunnels
+        response = requests.post(url, json=payload, headers=HEADERS, timeout=5)
         if response.status_code == 200:
             return "Successfully created index."
         elif response.status_code == 409:
             return f"Index '{index_name}' already exists."
         else:
             return f"Failed to create index. Status: {response.status_code}"
+    except requests.exceptions.Timeout:
+        return f"Error: Connection to Endee timed out after 5 seconds at {ENDEE_URL}."
     except requests.exceptions.ConnectionError:
         return f"Error: Could not connect to Endee at {ENDEE_URL}."
 
-init_status = init_endee(INDEX_NAME, DIMENSION)
+# Initial UI feedback so user knows it's not "stuck"
+with st.sidebar:
+    st.info("🚀 App Initializing...")
+    init_status = init_endee(INDEX_NAME, DIMENSION)
+    if "Error" in init_status:
+        st.error(init_status)
+    else:
+        st.success("✅ Database Ready")
 
 # Main state for tracking ingested files and their vectors
 if 'vector_id' not in st.session_state:
@@ -153,7 +163,8 @@ def ingest_to_endee(embeddings, payloads, filename):
         return False, "No valid embeddings to insert."
         
     try:
-        response = requests.post(url, json=vectors, headers=HEADERS)
+        # Added timeout to prevent hanging
+        response = requests.post(url, json=vectors, headers=HEADERS, timeout=10)
         if response.status_code == 200:
             # Track the IDs for deletion later
             if filename not in st.session_state.ingested_files:
@@ -180,7 +191,8 @@ def delete_file_from_endee(filename):
     for doc_id in vector_ids:
         try:
             url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/vector/{doc_id}/delete"
-            res = requests.delete(url, headers=HEADERS)
+            # Added timeout
+            res = requests.delete(url, headers=HEADERS, timeout=5)
             if res.status_code == 200:
                 successful_deletes += 1
         except Exception as e:
@@ -283,7 +295,8 @@ with tab2:
         with st.spinner("Clearing database..."):
             url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete"
             try:
-                res = requests.delete(url, headers=HEADERS)
+                # Added timeout
+                res = requests.delete(url, headers=HEADERS, timeout=5)
                 if res.status_code == 200:
                     st.success("Database cleared successfully!")
                     st.cache_resource.clear()
@@ -315,7 +328,8 @@ with tab1:
                     payload = {"k": 3, "vector": query_embedding}
                     
                     try:
-                        response = requests.post(url, json=payload, headers=HEADERS)
+                        # Added timeout
+                        response = requests.post(url, json=payload, headers=HEADERS, timeout=5)
                         if response.status_code == 200:
                             unpacked_data = msgpack.unpackb(response.content, raw=False)
                             
