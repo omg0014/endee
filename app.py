@@ -193,10 +193,12 @@ def delete_file_from_endee(filename):
 # ---------------------------------------------------------
 st.title("🤖 Gemini AI RAG + Endee Vector DB")
 
+# Connection Status Indicator
 if "Error" in init_status:
-    st.error(init_status)
-    st.warning("Please check if your Endee server is running. If you are on Streamlit Cloud, ensure you have set the 'ENDEE_URL' in your App Secrets.")
-    st.stop()
+    st.error(f"📡 {init_status}")
+    st.warning("⚠️ **Database Offline**: If you are on Streamlit Cloud, check your `ENDEE_URL` in Secrets and ensure your local tunnel is running.")
+else:
+    st.success(f"📡 Connected to Endee: {ENDEE_URL}")
 
 tab1, tab2 = st.tabs(["Search & Chat", "Upload Data"])
 
