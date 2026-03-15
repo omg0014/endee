@@ -56,7 +56,7 @@ def init_endee(index_name, dimension):
     }
     try:
         # Added 5s timeout to prevent hanging on slow/broken localtunnels
-        response = requests.post(url, json=payload, headers=HEADERS, timeout=5)
+        response = requests.post(url, json=payload, headers=HEADERS, timeout=15)
         if response.status_code == 200:
             return "Successfully created index."
         elif response.status_code == 409:
@@ -206,7 +206,7 @@ def delete_file_from_endee(filename):
         try:
             url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/vector/{doc_id}/delete"
             # Added timeout
-            res = requests.delete(url, headers=HEADERS, timeout=5)
+            res = requests.delete(url, headers=HEADERS, timeout=15)
             if res.status_code == 200:
                 successful_deletes += 1
         except Exception as e:
@@ -310,7 +310,7 @@ with tab2:
             url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete"
             try:
                 # Added timeout
-                res = requests.delete(url, headers=HEADERS, timeout=5)
+                res = requests.delete(url, headers=HEADERS, timeout=15)
                 if res.status_code == 200:
                     st.success("Database cleared successfully!")
                     st.cache_resource.clear()
@@ -343,7 +343,7 @@ with tab1:
                     
                     try:
                         # Added timeout
-                        response = requests.post(url, json=payload, headers=HEADERS, timeout=5)
+                        response = requests.post(url, json=payload, headers=HEADERS, timeout=15)
                         if response.status_code == 200:
                             unpacked_data = msgpack.unpackb(response.content, raw=False)
                             
