@@ -8,6 +8,7 @@ import google.generativeai as genai
 from PIL import Image
 import tempfile
 from dotenv import load_dotenv
+import uuid
 
 # Load environment variables from .env
 load_dotenv()
@@ -32,7 +33,7 @@ genai.configure(api_key=GEMINI_API_KEY)
 # Endee configuration
 # First check Streamlit Secrets, then environment, then default to localhost
 ENDEE_URL = st.secrets.get("ENDEE_URL", os.getenv("ENDEE_URL", "http://localhost:8080"))
-INDEX_NAME = "gemini_semantic_search_v2"
+INDEX_NAME = "gemini_semantic_search_v3"
 DIMENSION = 3072  # GEMINI gemini-embedding-001 dimension
 SPACE_TYPE = "cosine"
 
@@ -82,9 +83,6 @@ with st.sidebar:
         st.success("✅ Database Ready")
 
 # Main state for tracking ingested files and their vectors
-if 'vector_id' not in st.session_state:
-    st.session_state.vector_id = 1
-
 if 'ingested_files' not in st.session_state:
     st.session_state.ingested_files = {} # format: {filename: [doc_id_1, doc_id_2, ...]}
 
@@ -180,14 +178,14 @@ def ingest_to_endee(embeddings, payloads, filename):
     for emb, meta in zip(embeddings, payloads):
         if not emb: continue
         
-        doc_id = f"doc_{st.session_state.vector_id}"
+        # Use UUIDs to avoid any ID collisions
+        doc_id = str(uuid.uuid4())
         vectors.append({
             "id": doc_id, 
             "vector": emb,
             "meta": json.dumps(meta)
         })
         vector_ids.append(doc_id)
-        st.session_state.vector_id += 1
         
     if not vectors:
         return False, "No valid embeddings to insert."
