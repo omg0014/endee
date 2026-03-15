@@ -1,0 +1,11 @@
+sentence-transformers
+numpy
+PyMuPDF  # imported as fitz
+Pillow
+torch
+transformers
+requests
+msgpack
+gradio
+reportlab
+google-generativeai
