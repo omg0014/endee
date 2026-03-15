@@ -100,10 +100,17 @@ def get_embeddings_batch(texts):
             content=texts,
             task_type="retrieval_document"
         )
-        return response['embeddings']
+        # Handle both single and batch response formats
+        if 'embeddings' in response:
+            return response['embeddings']
+        elif 'embedding' in response:
+            return [response['embedding']]
+        else:
+            st.error(f"Unexpected API response: {response}")
+            return []
     except Exception as e:
         err_msg = str(e)
-        if "leaked" in err_msg.lower() or "expired" in err_msg.lower() or "invalid" in err_msg.lower():
+        if any(kw in err_msg.lower() for kw in ["leaked", "expired", "invalid", "403", "400"]):
             st.error(f"🚨 **API KEY ERROR**: {err_msg}")
             st.markdown("Please generate a **New API Key** at [Google AI Studio](https://aistudio.google.com/app/apikey) and update your Secrets.")
         else:
