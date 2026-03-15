@@ -211,7 +211,6 @@ if "Error" in init_status:
     st.sidebar.error("❌ Connection Failed")
     st.error(init_status)
     st.warning("Please check if your Endee server is running. If you are on Streamlit Cloud, provide your public tunnel URL in the sidebar.")
-    st.stop() if not ENDEE_URL else None # Only stop if no URL is provided, but we want the UI to exist
 
 tab1, tab2 = st.tabs(["Search & Chat", "Upload Data"])
 
