@@ -37,6 +37,11 @@ INDEX_NAME = "gemini_semantic_search_v3"
 DIMENSION = 3072  # GEMINI gemini-embedding-001 dimension
 SPACE_TYPE = "cosine"
 
+# Normalize URL: strip trailing slash and remove redundant /api/v1 if user added it
+ENDEE_URL = ENDEE_URL.rstrip("/")
+if ENDEE_URL.endswith("/api/v1"):
+    ENDEE_URL = ENDEE_URL[:-7]
+
 # Common headers to bypass localtunnel interstitial and set content type
 HEADERS = {
     "Content-Type": "application/json",
@@ -217,14 +222,18 @@ def ingest_to_endee(embeddings, payloads, filename):
                 st.session_state.ingested_files[filename].extend(vector_ids)
                 return True, f"Successfully ingested {len(vectors)} chunks into Endee!"
             else:
-                # Show full error body for 500 errors to help debugging
-                st.error(f"Endee Server Error ({response.status_code}): {response.text}")
+                # Show full error body and the URL for 404/500 errors to help debugging
+                st.error(f"Endee Server Error ({response.status_code})")
+                st.info(f"Target URL: `{url}`")
+                st.write(f"Server Response: {response.text}")
+                
                 # Log health check to see if server is still alive
                 try:
-                    health = requests.get(f"{ENDEE_URL}/api/v1/health", timeout=2)
-                    st.info(f"Server Health Status: {health.status_code}")
-                except:
-                    st.error("Server is totally unreachable.")
+                    health_url = f"{ENDEE_URL}/api/v1/health"
+                    health = requests.get(health_url, timeout=30)
+                    st.info(f"Health Check ({health_url}): {health.status_code}")
+                except Exception as e:
+                    st.error(f"Server is totally unreachable: {e}")
                 
                 return False, f"Failed to insert vectors: {response.status_code} {response.text}"
         except Exception as e:
