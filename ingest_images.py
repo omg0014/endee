@@ -1,25 +1,38 @@
-import os
-import json
-import requests
-from PIL import Image
-from transformers import BlipProcessor, BlipForConditionalGeneration
-from sentence_transformers import SentenceTransformer
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-# Endee configuration
-ENDEE_URL = "http://localhost:8080"
-INDEX_NAME = "semantic_search"
-DIMENSION = 384  # Dimension for 'all-MiniLM-L6-v2'
+# Load secrets
+load_dotenv()
+
+# Configuration
+ENDEE_URL = os.getenv("ENDEE_URL", "http://localhost:8080")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+INDEX_NAME = "gemini_semantic_search_v2"
+DIMENSION = 3072
 SPACE_TYPE = "cosine"
 IMAGE_DIR = "data/images"
 
-# Initialize image captioning model (BLIP)
-print("Loading BLIP model for image captioning...")
-processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    print("Error: GEMINI_API_KEY not found in .env")
+    exit(1)
 
-# Initialize embedding model (same one used for text to map to same space)
-print("Loading sentence-transformers model...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
+def get_embedding(text):
+    """Retrieve embedding from Gemini"""
+    response = genai.embed_content(
+        model="models/gemini-embedding-001",
+        content=text,
+        task_type="retrieval_document"
+    )
+    return response['embedding']
+
+def analyze_image_with_gemini(image_path):
+    """Generate a caption using Gemini"""
+    img = Image.open(image_path)
+    model = genai.GenerativeModel('models/gemini-2.5-flash')
+    response = model.generate_content(["Describe this image in detail for search.", img])
+    return response.text
 
 def create_index_if_not_exists():
     """Create the unified search index in Endee vector database"""
@@ -46,12 +59,7 @@ def create_index_if_not_exists():
         exit(1)
 
 def generate_caption(image_path):
-    """Generate a descriptive caption for an image"""
-    raw_image = Image.open(image_path).convert('RGB')
-    inputs = processor(raw_image, return_tensors="pt")
-    out = blip_model.generate(**inputs)
-    caption = processor.decode(out[0], skip_special_tokens=True)
-    return caption
+    return analyze_image_with_gemini(image_path)
 
 def process_images():
     if not os.path.exists(IMAGE_DIR):
@@ -79,13 +87,13 @@ def process_images():
         print(f"  Generated caption: '{caption}'")
         
         # 2. Text -> Embedding
-        embedding = model.encode(caption)
+        embedding = get_embedding(caption)
         
         vector_id += 1
         meta_dict = {"type": "image", "file": image_file, "content": caption}
         all_vectors.append({
             "id": f"img_{vector_id}_{image_file}", 
-            "vector": embedding.tolist(),
+            "vector": embedding,
             "meta": json.dumps(meta_dict)
         })
             

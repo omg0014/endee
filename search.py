@@ -1,19 +1,32 @@
+import os
 import json
 import requests
 import msgpack
-from sentence_transformers import SentenceTransformer
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-# Endee configuration
-ENDEE_URL = "http://localhost:8080"
-INDEX_NAME = "semantic_search"
+# Load secrets
+load_dotenv()
 
-# Initialize embedding model
-print("Loading sentence-transformers model...")
-try:
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-except Exception as e:
-    print(f"Error loading model: {e}")
+# Configuration
+ENDEE_URL = os.getenv("ENDEE_URL", "http://localhost:8080")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+INDEX_NAME = "gemini_semantic_search_v2"
+
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    print("Error: GEMINI_API_KEY not found in .env")
     exit(1)
+
+def get_embedding(text):
+    """Retrieve embedding from Gemini"""
+    response = genai.embed_content(
+        model="models/gemini-embedding-001",
+        content=text,
+        task_type="retrieval_document"
+    )
+    return response['embedding']
 
 def format_result(meta_str):
     try:
@@ -31,12 +44,12 @@ def format_result(meta_str):
 
 def search_endee(query_text, k=2):
     """Embed the query and search the unified Endee index"""
-    query_embedding = model.encode([query_text])[0]
+    query_embedding = get_embedding(query_text)
     
     url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/search"
     payload = {
         "k": k,
-        "vector": query_embedding.tolist()
+        "vector": query_embedding
     }
     
     try:

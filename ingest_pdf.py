@@ -1,19 +1,31 @@
-import os
-import fitz  # PyMuPDF
-import json
-import requests
-from sentence_transformers import SentenceTransformer
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-# Endee configuration
-ENDEE_URL = "http://localhost:8080"
-INDEX_NAME = "semantic_search"
-DIMENSION = 384  # Dimension for 'all-MiniLM-L6-v2'
+# Load secrets
+load_dotenv()
+
+# Configuration
+ENDEE_URL = os.getenv("ENDEE_URL", "http://localhost:8080")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+INDEX_NAME = "gemini_semantic_search_v2"
+DIMENSION = 3072  # Gemini dimension
 SPACE_TYPE = "cosine"
 PDF_DIR = "data/pdfs"
 
-# Initialize embedding model
-print("Loading sentence-transformers model...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    print("Error: GEMINI_API_KEY not found in .env")
+    exit(1)
+
+def get_embedding(text):
+    """Retrieve embedding from Gemini"""
+    response = genai.embed_content(
+        model="models/gemini-embedding-001",
+        content=text,
+        task_type="retrieval_document"
+    )
+    return response['embedding']
 
 def create_index_if_not_exists():
     """Create the unified search index in Endee vector database"""
@@ -79,15 +91,15 @@ def process_pdfs():
         full_text = extract_text_from_pdf(pdf_path)
         chunks = chunk_text(full_text)
         
-        print(f"Extracted {len(chunks)} chunks from {pdf_file}. Generating embeddings...")
-        embeddings = model.encode(chunks)
+        print(f"Extracted {len(chunks)} chunks from {pdf_file}. Generating Gemini embeddings...")
+        embeddings = [get_embedding(chunk) for chunk in chunks]
         
         for chunk, embedding in zip(chunks, embeddings):
             vector_id += 1
             meta_dict = {"type": "pdf", "file": pdf_file, "content": chunk}
             all_vectors.append({
                 "id": f"pdf_{vector_id}_{pdf_file}", 
-                "vector": embedding.tolist(),
+                "vector": embedding,
                 "meta": json.dumps(meta_dict)
             })
             
