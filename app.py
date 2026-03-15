@@ -57,7 +57,7 @@ def init_endee(index_name, dimension):
         "index_name": index_name,
         "dim": dimension,
         "space_type": SPACE_TYPE,
-        "precision": "float32"
+        "precision": "int8"
     }
     try:
         # Added 5s timeout to prevent hanging on slow/broken localtunnels
@@ -98,14 +98,15 @@ def get_embeddings_batch(texts):
             content=texts,
             task_type="retrieval_document"
         )
-        # Handle both single and batch response formats
-        if 'embeddings' in response:
-            return response['embeddings']
-        elif 'embedding' in response:
-            return [response['embedding']]
-        else:
-            st.error(f"Unexpected API response: {response}")
-            return []
+        # Sanitize embeddings for NaN or Inf values
+        sanitized_embeddings = []
+        for emb in response['embeddings' if 'embeddings' in response else 'embedding']:
+            if isinstance(emb, list):
+                sanitized_embeddings.append([0.0 if (x != x or x == float('inf') or x == float('-inf')) else x for x in emb])
+            else:
+                sanitized_embeddings.append(0.0 if (emb != emb or emb == float('inf') or emb == float('-inf')) else emb)
+
+        return sanitized_embeddings if 'embeddings' in response else [sanitized_embeddings[0]]
     except Exception as e:
         err_msg = str(e)
         if any(kw in err_msg.lower() for kw in ["leaked", "expired", "invalid", "403", "400"]):
@@ -194,24 +195,34 @@ def ingest_to_endee(embeddings, payloads, filename):
     max_retries = 3
     for attempt in range(max_retries):
         try:
+            # Log payload for debugging (visible in console)
+            if attempt == 0:
+                print(f"DEBUG: Sending {len(vectors)} vectors to {url}")
+                print(f"DEBUG: Sample vector size: {len(vectors[0]['vector'])}")
+                
             # Increased timeout to 15s to support slow tunnels
             response = requests.post(url, json=vectors, headers=HEADERS, timeout=15)
+            
             if response.status_code == 200:
                 # Track the IDs for deletion later
                 if filename not in st.session_state.ingested_files:
                     st.session_state.ingested_files[filename] = []
                 st.session_state.ingested_files[filename].extend(vector_ids)
                 return True, f"Successfully ingested {len(vectors)} chunks into Endee!"
-            elif response.status_code == 503 and attempt < max_retries - 1:
-                st.warning(f"🔄 Tunnel busy (503). Retrying attempt {attempt+2}/{max_retries}...")
-                continue
             else:
                 # Show full error body for 500 errors to help debugging
                 st.error(f"Endee Server Error ({response.status_code}): {response.text}")
+                # Log health check to see if server is still alive
+                try:
+                    health = requests.get(f"{ENDEE_URL}/api/v1/health", timeout=2)
+                    st.info(f"Server Health Status: {health.status_code}")
+                except:
+                    st.error("Server is totally unreachable.")
+                
                 return False, f"Failed to insert vectors: {response.status_code} {response.text}"
         except Exception as e:
             if attempt < max_retries - 1:
-                st.info(f"🔄 Connection flicker? Retrying... ({attempt+1})")
+                st.warning(f"🔄 Connection flicker? Retrying... ({attempt+1})")
                 continue
             return False, f"Connection error: {e}"
 
