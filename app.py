@@ -126,15 +126,14 @@ def analyze_image_with_gemini(image_path):
     """Generate a highly descriptive caption for the image"""
     try:
         img = Image.open(image_path)
-        model = genai.GenerativeModel('models/gemini-2.5-flash')
-        response = model.generate_content([
-            "Describe this image in extreme detail so that it can be searched accurately.", 
-            img
-        ])
+        # Fixed typo: gemini-2.5-flash -> gemini-1.5-flash
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        prompt = "Describe this image in detail for a semantic search database. Focus on objects, colors, text, and overall context."
+        response = model.generate_content([prompt, img])
         return response.text
     except Exception as e:
-        st.error(f"Error generating image caption: {e}")
-        return "Unknown Image"
+        st.error(f"Error in image analysis: {e}")
+        return None
 
 def generate_rag_response(query, context):
     """Generate final answer using Gemini with the retrieved context"""
@@ -209,9 +208,12 @@ def ingest_to_endee(embeddings, payloads, filename):
                 st.warning(f"🔄 Tunnel busy (503). Retrying attempt {attempt+2}/{max_retries}...")
                 continue
             else:
+                # Show full error body for 500 errors to help debugging
+                st.error(f"Endee Server Error ({response.status_code}): {response.text}")
                 return False, f"Failed to insert vectors: {response.status_code} {response.text}"
         except Exception as e:
             if attempt < max_retries - 1:
+                st.info(f"🔄 Connection flicker? Retrying... ({attempt+1})")
                 continue
             return False, f"Connection error: {e}"
 
