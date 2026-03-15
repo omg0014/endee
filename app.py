@@ -23,6 +23,10 @@ if not GEMINI_API_KEY:
     st.error("❌ **GEMINI_API_KEY Missing**: Please set your API key in Streamlit Secrets (Cloud) or `.env` (Local).")
     st.stop()
 
+# Display masked key for debugging
+masked_key = f"{GEMINI_API_KEY[:6]}...{GEMINI_API_KEY[-4:]}" if len(GEMINI_API_KEY) > 10 else "****"
+st.sidebar.text(f"🔑 Key: {masked_key}")
+
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Endee configuration
@@ -87,23 +91,29 @@ if 'ingested_files' not in st.session_state:
 # ---------------------------------------------------------
 # Gemini Wrappers
 # ---------------------------------------------------------
-def get_embedding(text):
-    """Retrieve embedding from Gemini's gemini-embedding-001 model"""
+def get_embeddings_batch(texts):
+    """Retrieve embeddings for a list of strings in one call"""
+    if not texts: return []
     try:
         response = genai.embed_content(
             model="models/gemini-embedding-001",
-            content=text,
+            content=texts,
             task_type="retrieval_document"
         )
-        return response['embedding']
+        return response['embeddings']
     except Exception as e:
         err_msg = str(e)
-        if "leaked" in err_msg.lower():
-            st.error("🚨 **API KEY REVOKED**: Google has disabled your key because it was leaked on GitHub.")
-            st.markdown("1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey)\n2. Generate a **New API Key**\n3. Update your **Secrets/Environment Variables**.")
+        if "leaked" in err_msg.lower() or "expired" in err_msg.lower() or "invalid" in err_msg.lower():
+            st.error(f"🚨 **API KEY ERROR**: {err_msg}")
+            st.markdown("Please generate a **New API Key** at [Google AI Studio](https://aistudio.google.com/app/apikey) and update your Secrets.")
         else:
-            st.error(f"Error generating embedding: {e}")
-        return None
+            st.error(f"Error in batch embedding: {e}")
+        return []
+
+def get_embedding(text):
+    """Retrieve single embedding"""
+    res = get_embeddings_batch([text])
+    return res[0] if res else None
 
 def analyze_image_with_gemini(image_path):
     """Generate a highly descriptive caption for the image"""
@@ -263,7 +273,8 @@ with tab2:
                                 text += page.get_text() + "\n"
                             
                             chunks = chunk_text(text)
-                            embeddings = [get_embedding(chunk) for chunk in chunks]
+                            st.write(f"⏳ Generating batch embeddings for {len(chunks)} chunks...")
+                            embeddings = get_embeddings_batch(chunks)
                             payloads = [{"type": "pdf", "file": filename, "content": chunk} for chunk in chunks]
                             
                             success, msg = ingest_to_endee(embeddings, payloads, filename)
