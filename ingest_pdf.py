@@ -12,6 +12,11 @@ DIMENSION = 3072  # Gemini dimension
 SPACE_TYPE = "cosine"
 PDF_DIR = "data/pdfs"
 
+HEADERS = {
+    "Content-Type": "application/json",
+    "Bypass-Tunnel-Reminder": "true"
+}
+
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 else:
@@ -40,7 +45,7 @@ def create_index_if_not_exists():
     }
     
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, headers=HEADERS)
         if response.status_code == 200:
             print("Successfully created index.")
         elif response.status_code == 409:
@@ -109,7 +114,7 @@ def process_pdfs():
         headers = {"Content-Type": "application/json"}
         
         # Insert in batches if too large, but for a simple project one request is fine
-        response = requests.post(url, json=all_vectors, headers=headers)
+        response = requests.post(url, json=all_vectors, headers=HEADERS)
         
         if response.status_code == 200:
             print("Successfully ingested PDF vectors into Endee!")

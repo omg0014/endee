@@ -13,6 +13,11 @@ ENDEE_URL = os.getenv("ENDEE_URL", "http://localhost:8080")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 INDEX_NAME = "gemini_semantic_search_v2"
 
+HEADERS = {
+    "Content-Type": "application/json",
+    "Bypass-Tunnel-Reminder": "true"
+}
+
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 else:
@@ -53,7 +58,7 @@ def search_endee(query_text, k=2):
     }
     
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, headers=HEADERS)
         
         if response.status_code == 200:
             unpacked_data = msgpack.unpackb(response.content, raw=False)

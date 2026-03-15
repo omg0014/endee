@@ -27,6 +27,12 @@ INDEX_NAME = "gemini_semantic_search_v2"
 DIMENSION = 3072  # GEMINI gemini-embedding-001 dimension
 SPACE_TYPE = "cosine"
 
+# Common headers to bypass localtunnel interstitial and set content type
+HEADERS = {
+    "Content-Type": "application/json",
+    "Bypass-Tunnel-Reminder": "true"
+}
+
 # Layout
 st.set_page_config(page_title="AI Semantic Search", page_icon="🤖", layout="wide")
 
@@ -44,7 +50,7 @@ def init_endee(index_name, dimension):
         "precision": "float32"
     }
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, headers=HEADERS)
         if response.status_code == 200:
             return "Successfully created index."
         elif response.status_code == 409:
@@ -147,7 +153,7 @@ def ingest_to_endee(embeddings, payloads, filename):
         return False, "No valid embeddings to insert."
         
     try:
-        response = requests.post(url, json=vectors, headers={"Content-Type": "application/json"})
+        response = requests.post(url, json=vectors, headers=HEADERS)
         if response.status_code == 200:
             # Track the IDs for deletion later
             if filename not in st.session_state.ingested_files:
@@ -174,7 +180,7 @@ def delete_file_from_endee(filename):
     for doc_id in vector_ids:
         try:
             url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/vector/{doc_id}/delete"
-            res = requests.delete(url)
+            res = requests.delete(url, headers=HEADERS)
             if res.status_code == 200:
                 successful_deletes += 1
         except Exception as e:
@@ -277,7 +283,7 @@ with tab2:
         with st.spinner("Clearing database..."):
             url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete"
             try:
-                res = requests.delete(url)
+                res = requests.delete(url, headers=HEADERS)
                 if res.status_code == 200:
                     st.success("Database cleared successfully!")
                     st.cache_resource.clear()
@@ -309,7 +315,7 @@ with tab1:
                     payload = {"k": 3, "vector": query_embedding}
                     
                     try:
-                        response = requests.post(url, json=payload)
+                        response = requests.post(url, json=payload, headers=HEADERS)
                         if response.status_code == 200:
                             unpacked_data = msgpack.unpackb(response.content, raw=False)
                             

@@ -12,6 +12,11 @@ DIMENSION = 3072
 SPACE_TYPE = "cosine"
 IMAGE_DIR = "data/images"
 
+HEADERS = {
+    "Content-Type": "application/json",
+    "Bypass-Tunnel-Reminder": "true"
+}
+
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 else:
@@ -47,7 +52,7 @@ def create_index_if_not_exists():
     }
     
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, headers=HEADERS)
         if response.status_code == 200:
             print("Successfully created index.")
         elif response.status_code == 409:
@@ -102,7 +107,7 @@ def process_images():
         url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/vector/insert"
         headers = {"Content-Type": "application/json"}
         
-        response = requests.post(url, json=all_vectors, headers=headers)
+        response = requests.post(url, json=all_vectors, headers=HEADERS)
         
         if response.status_code == 200:
             print("Successfully ingested Image vectors into Endee!")
