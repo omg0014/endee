@@ -149,8 +149,8 @@ def analyze_image_with_gemini(image_path):
     """Generate a highly descriptive caption for the image"""
     try:
         img = Image.open(image_path)
-        # Fixed typo: gemini-2.5-flash -> gemini-1.5-flash
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Updated to Gemini 2.0 since 1.5 was not found in user region
+        model = genai.GenerativeModel('models/gemini-2.0-flash')
         prompt = "Describe this image in detail for a semantic search database. Focus on objects, colors, text, and overall context."
         response = model.generate_content([prompt, img])
         return response.text
@@ -165,8 +165,8 @@ def analyze_image_with_gemini(image_path):
 def generate_rag_response(query, context):
     """Generate final answer using Gemini with the retrieved context"""
     try:
-        # Standardized on gemini-1.5-flash
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Updated to Gemini 2.0 since 1.5 was not found in user region
+        model = genai.GenerativeModel('models/gemini-2.0-flash')
         prompt = f"""You are a helpful AI Semantic Search assistant. 
 Please answer the user's question based ONLY on the provided Context documents/images. 
 If the context does not contain the answer, politely state that you do not know based on the uploaded files.
