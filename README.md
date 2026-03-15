@@ -1,4 +1,13 @@
-# AI Semantic Search for PDFs and Images using Endee Vector Database
+# 🤖 AI Semantic Search (Endee + Gemini)
+
+> [!CAUTION]
+> **API KEY LEAKED?** If you see a `403 Your API key was reported as leaked` error, it means Google has disabled your key because it was detected in a public repository.
+> 
+> **To fix this:**
+> 1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey).
+> 2. Delete the old key and **Create a New API Key**.
+> 3. Update your **Streamlit Cloud Secrets** with the new key (`GEMINI_API_KEY = "your-new-key"`).
+> 4. Update your local `.env` file with the new key.
 
 ## Project Overview
 

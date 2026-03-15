@@ -17,7 +17,12 @@ load_dotenv()
 # ---------------------------------------------------------
 
 # The user-provided API Key
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyBK4O8z6zvBjA4TtXURDcXQumGa9UeNTHw")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if not GEMINI_API_KEY:
+    st.error("❌ **GEMINI_API_KEY Missing**: Please set your API key in Streamlit Secrets (Cloud) or `.env` (Local).")
+    st.stop()
+
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Endee configuration

@@ -21,7 +21,7 @@ HEADERS = {
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 else:
-    print("Error: GEMINI_API_KEY not found in .env")
+    print("Error: GEMINI_API_KEY not found in .env. Please add it to your .env file.")
     exit(1)
 
 def get_embedding(text):
