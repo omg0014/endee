@@ -108,3 +108,77 @@ User Question: {query}
         return "Sorry, there was an error generating the RAG response."
 
 
+# ---------------------------------------------------------
+# Ingestion Logic 
+# ---------------------------------------------------------
+def chunk_text(text, chunk_size=300):
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), chunk_size):
+        chunk = " ".join(words[i:i + chunk_size])
+        if chunk.strip():
+            chunks.append(chunk)
+    return chunks
+
+def ingest_to_endee(embeddings, payloads, filename):
+    """Insert vectors into Endee and track their IDs"""
+    url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/vector/insert"
+    vectors = []
+    vector_ids = []
+    
+    for emb, meta in zip(embeddings, payloads):
+        if not emb: continue
+        
+        doc_id = f"doc_{st.session_state.vector_id}"
+        vectors.append({
+            "id": doc_id, 
+            "vector": emb,
+            "meta": json.dumps(meta)
+        })
+        vector_ids.append(doc_id)
+        st.session_state.vector_id += 1
+        
+    if not vectors:
+        return False, "No valid embeddings to insert."
+        
+    try:
+        response = requests.post(url, json=vectors, headers={"Content-Type": "application/json"})
+        if response.status_code == 200:
+            # Track the IDs for deletion later
+            if filename not in st.session_state.ingested_files:
+                st.session_state.ingested_files[filename] = []
+            st.session_state.ingested_files[filename].extend(vector_ids)
+            
+            return True, f"Successfully ingested {len(vectors)} chunks into Endee!"
+        else:
+            return False, f"Failed to insert vectors: {response.status_code} {response.text}"
+    except Exception as e:
+        return False, f"Connection error: {e}"
+
+def delete_file_from_endee(filename):
+    """Delete all vectors associated with a specific file"""
+    if filename not in st.session_state.ingested_files:
+        return False, f"File {filename} not found in current session tracking."
+        
+    vector_ids = st.session_state.ingested_files[filename]
+    
+    successful_deletes = 0
+    total = len(vector_ids)
+    
+    # Endee currently supports deleting one by one via properly routed DELETE HTTP methods
+    for doc_id in vector_ids:
+        try:
+            url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/vector/{doc_id}/delete"
+            res = requests.delete(url)
+            if res.status_code == 200:
+                successful_deletes += 1
+        except Exception as e:
+            pass
+            
+    # Remove from tracking even if partial failure, to prevent ghost UI elements
+    del st.session_state.ingested_files[filename]
+    
+    if successful_deletes == total:
+         return True, f"Successfully deleted {filename} ({total} vectors)."
+    else:
+         return True, f"Deleted {filename} (Removed {successful_deletes}/{total} vectors)."
