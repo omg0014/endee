@@ -126,18 +126,23 @@ def analyze_image_with_gemini(image_path):
     try:
         img = Image.open(image_path)
         # Fixed typo: gemini-2.5-flash -> gemini-1.5-flash
-        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         prompt = "Describe this image in detail for a semantic search database. Focus on objects, colors, text, and overall context."
         response = model.generate_content([prompt, img])
         return response.text
     except Exception as e:
-        st.error(f"Error in image analysis: {e}")
+        err_msg = str(e)
+        if "quota" in err_msg.lower():
+            st.error("🚨 **QUOTA EXCEEDED**: You have hit the Google Free Tier limit (20 requests/day). Please try again tomorrow or use a different API key.")
+        else:
+            st.error(f"Error in image analysis: {e}")
         return None
 
 def generate_rag_response(query, context):
     """Generate final answer using Gemini with the retrieved context"""
     try:
-        model = genai.GenerativeModel('models/gemini-2.5-flash')
+        # Standardized on gemini-1.5-flash
+        model = genai.GenerativeModel('gemini-1.5-flash')
         prompt = f"""You are a helpful AI Semantic Search assistant. 
 Please answer the user's question based ONLY on the provided Context documents/images. 
 If the context does not contain the answer, politely state that you do not know based on the uploaded files.
@@ -153,6 +158,8 @@ User Question: {query}
         err_msg = str(e)
         if "leaked" in err_msg.lower():
             st.error("🚨 **API KEY REVOKED**: Cannot generate response. Please rotate your API key in Google AI Studio.")
+        elif "quota" in err_msg.lower():
+            st.error("🚨 **QUOTA EXCEEDED**: You have hit the Google Free Tier limit (20 requests/day).")
         else:
             st.error(f"Error in RAG reasoning: {e}")
         return "Sorry, there was an error generating the RAG response."
@@ -298,6 +305,10 @@ with tab2:
                                 text += page.get_text() + "\n"
                             
                             chunks = chunk_text(text)
+                            if not chunks:
+                                st.warning(f"⚠️ {filename} appears to be empty or unscannable.")
+                                continue
+
                             st.write(f"⏳ Generating batch embeddings for {len(chunks)} chunks...")
                             embeddings = get_embeddings_batch(chunks)
                             payloads = [{"type": "pdf", "file": filename, "content": chunk} for chunk in chunks]
