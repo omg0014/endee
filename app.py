@@ -193,20 +193,27 @@ def ingest_to_endee(embeddings, payloads, filename):
     if not vectors:
         return False, "No valid embeddings to insert."
         
-    try:
-        # Added timeout to prevent hanging
-        response = requests.post(url, json=vectors, headers=HEADERS, timeout=10)
-        if response.status_code == 200:
-            # Track the IDs for deletion later
-            if filename not in st.session_state.ingested_files:
-                st.session_state.ingested_files[filename] = []
-            st.session_state.ingested_files[filename].extend(vector_ids)
-            
-            return True, f"Successfully ingested {len(vectors)} chunks into Endee!"
-        else:
-            return False, f"Failed to insert vectors: {response.status_code} {response.text}"
-    except Exception as e:
-        return False, f"Connection error: {e}"
+    # Retry logic for tunnel stability
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Increased timeout to 15s to support slow tunnels
+            response = requests.post(url, json=vectors, headers=HEADERS, timeout=15)
+            if response.status_code == 200:
+                # Track the IDs for deletion later
+                if filename not in st.session_state.ingested_files:
+                    st.session_state.ingested_files[filename] = []
+                st.session_state.ingested_files[filename].extend(vector_ids)
+                return True, f"Successfully ingested {len(vectors)} chunks into Endee!"
+            elif response.status_code == 503 and attempt < max_retries - 1:
+                st.warning(f"🔄 Tunnel busy (503). Retrying attempt {attempt+2}/{max_retries}...")
+                continue
+            else:
+                return False, f"Failed to insert vectors: {response.status_code} {response.text}"
+        except Exception as e:
+            if attempt < max_retries - 1:
+                continue
+            return False, f"Connection error: {e}"
 
 def delete_file_from_endee(filename):
     """Delete all vectors associated with a specific file"""
