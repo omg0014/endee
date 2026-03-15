@@ -16,8 +16,9 @@ import tempfile
 GEMINI_API_KEY = "AIzaSyBK4O8z6zvBjA4TtXURDcXQumGa9UeNTHw"
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Default Endee configuration
-DEFAULT_ENDEE_URL = "http://localhost:8080"
+# Endee configuration
+# First check Streamlit Secrets, then environment, then default to localhost
+ENDEE_URL = st.secrets.get("ENDEE_URL", os.environ.get("ENDEE_URL", "http://localhost:8080"))
 INDEX_NAME = "gemini_semantic_search_v2"
 DIMENSION = 3072  # GEMINI gemini-embedding-001 dimension
 SPACE_TYPE = "cosine"
@@ -48,25 +49,6 @@ def init_endee(index_name, dimension):
             return f"Failed to create index. Status: {response.status_code}"
     except requests.exceptions.ConnectionError:
         return f"Error: Could not connect to Endee at {ENDEE_URL}."
-
-# Sidebar for Configuration
-st.sidebar.title("⚙️ Configuration")
-st.sidebar.markdown("### Database Settings")
-ENDEE_URL = st.sidebar.text_input(
-    "Endee Server URL", 
-    value=DEFAULT_ENDEE_URL, 
-    help="Change this to your Localtunnel URL (e.g., https://...loca.lt) if deploying to Streamlit Cloud."
-)
-
-if st.sidebar.button("Test & Refresh Connection"):
-    st.cache_resource.clear()
-    st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.info("""
-**Cloud Deployment Tip:**
-If deploying to Streamlit Cloud, use a public tunnel (like localtunnel) on your local machine to expose Endee, then paste the URL above.
-""")
 
 init_status = init_endee(INDEX_NAME, DIMENSION)
 
@@ -208,9 +190,9 @@ def delete_file_from_endee(filename):
 st.title("🤖 Gemini AI RAG + Endee Vector DB")
 
 if "Error" in init_status:
-    st.sidebar.error("❌ Connection Failed")
     st.error(init_status)
-    st.warning("Please check if your Endee server is running. If you are on Streamlit Cloud, provide your public tunnel URL in the sidebar.")
+    st.warning("Please check if your Endee server is running. If you are on Streamlit Cloud, ensure you have set the 'ENDEE_URL' in your App Secrets.")
+    st.stop()
 
 tab1, tab2 = st.tabs(["Search & Chat", "Upload Data"])
 

@@ -139,8 +139,11 @@ If you wish to deploy this interface to **Streamlit Cloud**, follow these steps:
    *Note: This will provide a public URL like `https://funny-cats-split.loca.lt`.*
 3. **Connect the App**:
    - Deploy your app on the Streamlit Cloud dashboard.
-   - Once live, open the **⚙️ Configuration** sidebar in your app.
-   - Paste your **Localtunnel URL** into the "Endee Server URL" field.
-   - Click **Refresh Connection**.
+   - Go to **Settings** > **Secrets** in the Streamlit Cloud dashboard.
+   - Add your **Localtunnel URL** like this:
+     ```toml
+     ENDEE_URL = "https://your-tunnel-url.loca.lt"
+     ```
+   - Save the secrets and your app will automatically reconnect.
 
-Now your cloud-hosted app can securely communicate with your local vector database!
+Now your cloud-hosted app can securely communicate with your local vector database without any extra UI clutter!
