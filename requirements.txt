@@ -9,3 +9,4 @@ msgpack
 gradio
 reportlab
 google-generativeai
+python-dotenv

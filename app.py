@@ -7,18 +7,22 @@ import fitz  # PyMuPDF
 import google.generativeai as genai
 from PIL import Image
 import tempfile
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 # ---------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------
 
 # The user-provided API Key
-GEMINI_API_KEY = "AIzaSyBK4O8z6zvBjA4TtXURDcXQumGa9UeNTHw"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyBK4O8z6zvBjA4TtXURDcXQumGa9UeNTHw")
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Endee configuration
 # First check Streamlit Secrets, then environment, then default to localhost
-ENDEE_URL = st.secrets.get("ENDEE_URL", os.environ.get("ENDEE_URL", "http://localhost:8080"))
+ENDEE_URL = st.secrets.get("ENDEE_URL", os.getenv("ENDEE_URL", "http://localhost:8080"))
 INDEX_NAME = "gemini_semantic_search_v2"
 DIMENSION = 3072  # GEMINI gemini-embedding-001 dimension
 SPACE_TYPE = "cosine"
