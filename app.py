@@ -220,7 +220,14 @@ def ingest_to_endee(embeddings, payloads, filename):
                 st.error(f"Endee Server Error ({response.status_code})")
                 
                 if "Required files missing" in response.text:
-                    st.warning("💡 **Fix Detected**: Your database files are missing. Please click **🗑️ Deep Reset Index** in the sidebar to recreate the index.")
+                    st.warning("💡 **Fix Detected**: Your database metadata is out of sync with its files. This usually happens after a server restart on Render.")
+                    if st.button("🔨 Repair Database (Deep Reset)", type="primary"):
+                         with st.spinner("Repairing..."):
+                             requests.delete(f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete", headers=HEADERS, timeout=30)
+                             st.cache_resource.clear()
+                             init_endee(INDEX_NAME, DIMENSION)
+                             st.success("✅ Database Repaired! Please try ingesting again.")
+                             st.rerun()
                 
                 st.info(f"Target URL: `{url}`")
                 st.write(f"Server Response: {response.text}")
@@ -357,23 +364,20 @@ with tab2:
                             
     st.markdown("---")
     st.markdown("### Danger Zone")
-    if st.button("🗑️ Clear Entire Database", type="secondary"):
-        with st.spinner("Clearing database..."):
-            url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete"
-            try:
-                # Increased timeout
-                res = requests.delete(url, headers=HEADERS, timeout=30)
-                if res.status_code == 200:
-                    st.success("Database cleared successfully!")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if st.button("🗑️ Deep Reset Database", type="secondary", help="Wipes all data and metadata. Use this to fix 400/500 errors."):
+            with st.spinner("Resetting..."):
+                url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete"
+                try:
+                    res = requests.delete(url, headers=HEADERS, timeout=30)
                     st.cache_resource.clear()
-                    st.session_state.vector_id = 1
-                    st.session_state.ingested_files = {} # Clear tracked files
+                    st.session_state.ingested_files = {} 
                     init_endee(INDEX_NAME, DIMENSION)
+                    st.success("Database wiped and reset!")
                     st.rerun()
-                else:
-                    st.error(f"Failed to clear database: {res.text}")
-            except Exception as e:
-                st.error(f"Error connecting to Endee: {e}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
 with tab1:
     st.markdown("### Ask a Question")
