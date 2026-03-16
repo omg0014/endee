@@ -10,50 +10,51 @@ import tempfile
 from dotenv import load_dotenv
 import uuid
 
-# Load environment variables from .env
+# Load environment variables
 load_dotenv()
 
 # ---------------------------------------------------------
-# Configuration
+# Configuration & Environment
 # ---------------------------------------------------------
 
-# The user-provided API Key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not GEMINI_API_KEY:
-    st.error("❌ **GEMINI_API_KEY Missing**: Please set your API key in Streamlit Secrets (Cloud) or `.env` (Local).")
+    st.error("❌ **GEMINI_API_KEY Missing**: Please set your API key in Streamlit Secrets or `.env`.")
     st.stop()
 
-# genai configuration
+# Configure Google Generative AI
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Endee configuration
-# First check Streamlit Secrets, then environment, then default to localhost
+# Endee Database Configuration
 ENDEE_URL = st.secrets.get("ENDEE_URL", os.getenv("ENDEE_URL", "http://localhost:8080"))
 INDEX_NAME = "gemini_semantic_search_v3"
-DIMENSION = 3072  # GEMINI gemini-embedding-001 dimension
+DIMENSION = 3072  # Dimension for gemini-embedding-001
 SPACE_TYPE = "cosine"
 
-# Normalize URL: strip trailing slash and remove redundant /api/v1 if user added it
+# Clean up URL for consistency
 ENDEE_URL = ENDEE_URL.rstrip("/")
 if ENDEE_URL.endswith("/api/v1"):
     ENDEE_URL = ENDEE_URL[:-7]
 
-# Common headers to bypass localtunnel interstitial and set content type
+# Global Headers
 HEADERS = {
     "Content-Type": "application/json",
-    "Bypass-Tunnel-Reminder": "true"
+    "Bypass-Tunnel-Reminder": "true" # Required for localtunnel stability
 }
 
-# Layout
-st.set_page_config(page_title="AI Semantic Search", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="Gemini AI PDF Search", page_icon="🤖", layout="wide")
 
 # ---------------------------------------------------------
-# Database Initialization
+# Database Operations
 # ---------------------------------------------------------
+
 @st.cache_resource
 def init_endee(index_name, dimension):
-    """Ensure our Gemini index exists in Endee."""
+    """
+    Ensure the vector index exists in the Endee database.
+    Returns a status string describing the result.
+    """
     url = f"{ENDEE_URL}/api/v1/index/create"
     payload = {
         "index_name": index_name,
@@ -62,7 +63,6 @@ def init_endee(index_name, dimension):
         "precision": "int8"
     }
     try:
-        # Increased to 30s for slow tunnels
         response = requests.post(url, json=payload, headers=HEADERS, timeout=30)
         if response.status_code == 200:
             return "Successfully created index."
@@ -70,81 +70,77 @@ def init_endee(index_name, dimension):
             return f"Index '{index_name}' already exists."
         else:
             return f"Failed to create index. Status: {response.status_code}"
-    except requests.exceptions.Timeout:
-        return f"Error: Connection to Endee timed out after 30 seconds at {ENDEE_URL}."
-    except requests.exceptions.ConnectionError:
-        return f"Error: Could not connect to Endee at {ENDEE_URL}."
+    except Exception as e:
+        return f"Error: Could not connect to Endee server at {ENDEE_URL}."
 
-# Initial database setup (background)
+# Initialize background connection
 with st.sidebar:
     init_status = init_endee(INDEX_NAME, DIMENSION)
     if "Error" in init_status:
         st.error(init_status)
 
-# Main state for tracking ingested files and their vectors
+# Session management for tracking ingested files
 if 'ingested_files' not in st.session_state:
-    st.session_state.ingested_files = {} # format: {filename: [doc_id_1, doc_id_2, ...]}
+    st.session_state.ingested_files = {} # {filename: [doc_id_1, doc_id_2, ...]}
 
 # ---------------------------------------------------------
-# Gemini Wrappers
+# Gemini API Interaction
 # ---------------------------------------------------------
+
 def get_embeddings_batch(texts):
-    """Retrieve embeddings for a list of strings in one call"""
-    if not texts: return []
+    """
+    Fetches embeddings for multiple text blocks in a single API call.
+    Includes sanitization to prevent NaN/Inf values.
+    """
+    if not texts:
+        return []
+    
     try:
         response = genai.embed_content(
             model="models/gemini-embedding-001",
             content=texts,
             task_type="retrieval_document"
         )
-        # Sanitize embeddings for NaN or Inf values
-        sanitized_embeddings = []
-        for emb in response['embeddings' if 'embeddings' in response else 'embedding']:
-            if isinstance(emb, list):
-                sanitized_embeddings.append([0.0 if (x != x or x == float('inf') or x == float('-inf')) else x for x in emb])
-            else:
-                sanitized_embeddings.append(0.0 if (emb != emb or emb == float('inf') or emb == float('-inf')) else emb)
+        
+        # Determine the correct key for the embeddings list
+        raw_embeddings = response.get('embeddings', response.get('embedding', []))
+        
+        # Sanitize each vector to ensure they are valid floats
+        def sanitize_val(x):
+            return 0.0 if (x != x or x in [float('inf'), float('-inf')]) else x
 
-        return sanitized_embeddings if 'embeddings' in response else [sanitized_embeddings[0]]
+        sanitized = []
+        for emb in raw_embeddings:
+            if isinstance(emb, list):
+                sanitized.append([sanitize_val(v) for v in emb])
+            else:
+                sanitized.append(sanitize_val(emb))
+                
+        return sanitized if 'embeddings' in response else [sanitized[0]]
+        
     except Exception as e:
-        err_msg = str(e)
-        if any(kw in err_msg.lower() for kw in ["leaked", "expired", "invalid", "403", "400"]):
-            st.error(f"🚨 **API KEY ERROR**: {err_msg}")
-            st.markdown("Please generate a **New API Key** at [Google AI Studio](https://aistudio.google.com/app/apikey) and update your Secrets.")
+        err_msg = str(e).lower()
+        if any(kw in err_msg for kw in ["key", "leaked", "expired", "invalid", "403", "400"]):
+            st.error("🚨 **API KEY ERROR**: Please check your Gemini API key settings.")
+            st.info("You can generate a new key at [Google AI Studio](https://aistudio.google.com/app/apikey).")
         else:
-            st.error(f"Error in batch embedding: {e}")
+            st.error(f"Embedding failed: {e}")
         return []
 
 def get_embedding(text):
-    """Retrieve single embedding"""
+    """Retrieves a single embedding for a query string."""
     res = get_embeddings_batch([text])
     return res[0] if res else None
 
-def analyze_image_with_gemini(image_path):
-    """Generate a highly descriptive caption for the image"""
-    try:
-        img = Image.open(image_path)
-        # Updated to Gemini 2.0 since 1.5 was not found in user region
-        model = genai.GenerativeModel('models/gemini-2.0-flash')
-        prompt = "Describe this image in detail for a semantic search database. Focus on objects, colors, text, and overall context."
-        response = model.generate_content([prompt, img])
-        return response.text
-    except Exception as e:
-        err_msg = str(e)
-        if "quota" in err_msg.lower():
-            st.error("🚨 **QUOTA EXCEEDED**: You have hit the Google Free Tier limit (20 requests/day). Please try again tomorrow or use a different API key.")
-        else:
-            st.error(f"Error in image analysis: {e}")
-        return None
-
 def generate_rag_response(query, context):
-    """Generate final answer using Gemini with the retrieved context"""
+    """
+    Uses Gemini to reason about the retrieved context and provide an answer.
+    """
     try:
-        # Updated to Gemini 2.0 since 1.5 was not found in user region
         model = genai.GenerativeModel('models/gemini-2.0-flash')
-        prompt = f"""You are a helpful AI Semantic Search assistant. 
-Please answer the user's question based ONLY on the provided Context documents/images. 
-If the context does not contain the answer, politely state that you do not know based on the uploaded files.
+        prompt = f"""You are a helpful AI assistant. 
+Answer the user question based ONLY on the provided Context. 
+If the information is missing, clearly state that the documents do not contain the answer.
 
 Context:
 {context}
@@ -154,20 +150,19 @@ User Question: {query}
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        err_msg = str(e)
-        if "leaked" in err_msg.lower():
-            st.error("🚨 **API KEY REVOKED**: Cannot generate response. Please rotate your API key in Google AI Studio.")
-        elif "quota" in err_msg.lower():
-            st.error("🚨 **QUOTA EXCEEDED**: You have hit the Google Free Tier limit (20 requests/day).")
+        err_msg = str(e).lower()
+        if "quota" in err_msg:
+            st.error("🚨 **QUOTA EXCEEDED**: Gemini Free Tier limit reached. Please try again later.")
         else:
-            st.error(f"Error in RAG reasoning: {e}")
-        return "Sorry, there was an error generating the RAG response."
-
+            st.error(f"Reasoning error: {e}")
+        return "I apologize, but I encountered an error while processing your request."
 
 # ---------------------------------------------------------
-# Ingestion Logic 
+# Document Ingestion
 # ---------------------------------------------------------
+
 def chunk_text(text, chunk_size=300):
+    """Splits text into manageable chunks for vector search."""
     words = text.split()
     chunks = []
     for i in range(0, len(words), chunk_size):
@@ -177,7 +172,9 @@ def chunk_text(text, chunk_size=300):
     return chunks
 
 def ingest_to_endee(embeddings, payloads, filename):
-    """Insert vectors into Endee and track their IDs"""
+    """
+    Pushes vectors to Endee with automatic retry logic for transient network issues.
+    """
     url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/vector/insert"
     vectors = []
     vector_ids = []
@@ -185,7 +182,6 @@ def ingest_to_endee(embeddings, payloads, filename):
     for emb, meta in zip(embeddings, payloads):
         if not emb: continue
         
-        # Use UUIDs to avoid any ID collisions
         doc_id = str(uuid.uuid4())
         vectors.append({
             "id": doc_id, 
@@ -195,256 +191,190 @@ def ingest_to_endee(embeddings, payloads, filename):
         vector_ids.append(doc_id)
         
     if not vectors:
-        return False, "No valid embeddings to insert."
+        return False, "No valid content to ingest."
         
-    # Retry logic for tunnel stability
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            # Log payload for debugging (visible in console)
-            if attempt == 0:
-                print(f"DEBUG: Sending {len(vectors)} vectors to {url}")
-                print(f"DEBUG: Sample vector size: {len(vectors[0]['vector'])}")
-                
-            # Increased timeout to 30s to support slow tunnels
             response = requests.post(url, json=vectors, headers=HEADERS, timeout=30)
             
             if response.status_code == 200:
-                # Track the IDs for deletion later
                 if filename not in st.session_state.ingested_files:
                     st.session_state.ingested_files[filename] = []
                 st.session_state.ingested_files[filename].extend(vector_ids)
-                return True, f"Successfully ingested {len(vectors)} chunks into Endee!"
-            else:
-                # Show full error body and the URL for 404/500 errors to help debugging
-                st.error(f"Endee Server Error ({response.status_code})")
-                
-                if "Required files missing" in response.text:
-                    st.warning("💡 **Fix Detected**: Your database metadata is out of sync with its files. This usually happens after a server restart on Render.")
-                    if st.button("🔨 Repair Database (Deep Reset)", type="primary"):
-                         with st.spinner("Repairing..."):
-                             requests.delete(f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete", headers=HEADERS, timeout=30)
-                             st.cache_resource.clear()
-                             init_endee(INDEX_NAME, DIMENSION)
-                             st.success("✅ Database Repaired! Please try ingesting again.")
-                             st.rerun()
-                
-                st.info(f"Target URL: `{url}`")
-                st.write(f"Server Response: {response.text}")
-                
-                # Log health check to see if server is still alive
-                try:
-                    health_url = f"{ENDEE_URL}/api/v1/health"
-                    health = requests.get(health_url, timeout=30)
-                    st.info(f"Health Check ({health_url}): {health.status_code}")
-                except Exception as e:
-                    st.error(f"Server is totally unreachable: {e}")
-                
-                return False, f"Failed to insert vectors: {response.status_code} {response.text}"
-        except Exception as e:
+                return True, f"Ingested {len(vectors)} chunks"
+            
+            # Handle specific metadata sync errors (Render persistent disk issues)
+            if response.status_code == 400 and "Required files missing" in response.text:
+                st.warning("⚠️ **Database Desync Detected**: Metadata is present but files are missing.")
+                if st.button("🔨 Repair Database Now", type="primary"):
+                     with st.spinner("Repairing..."):
+                         requests.delete(f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete", headers=HEADERS, timeout=30)
+                         st.cache_resource.clear()
+                         init_endee(INDEX_NAME, DIMENSION)
+                         st.success("Database repaired! Please try again.")
+                         st.rerun()
+                return False, "Database requires repair."
+
+            return False, f"Server Error: {response.status_code}"
+            
+        except Exception:
             if attempt < max_retries - 1:
-                st.warning(f"🔄 Connection flicker? Retrying... ({attempt+1})")
                 continue
-            return False, f"Connection error: {e}"
+            return False, "Connection failure after retries."
 
 def delete_file_from_endee(filename):
-    """Delete all vectors associated with a specific file"""
+    """Removes all vectors associated with a specific file from the index."""
     if filename not in st.session_state.ingested_files:
-        return False, f"File {filename} not found in current session tracking."
+        return False, "File not tracked."
         
     vector_ids = st.session_state.ingested_files[filename]
+    success_count = 0
     
-    successful_deletes = 0
-    total = len(vector_ids)
-    
-    # Endee currently supports deleting one by one via properly routed DELETE HTTP methods
     for doc_id in vector_ids:
         try:
             url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/vector/{doc_id}/delete"
-            # Increased timeout to 30s
-            res = requests.delete(url, headers=HEADERS, timeout=30)
+            res = requests.delete(url, headers=HEADERS, timeout=15)
             if res.status_code == 200:
-                successful_deletes += 1
-        except Exception as e:
+                success_count += 1
+        except Exception:
             pass
             
-    # Remove from tracking even if partial failure, to prevent ghost UI elements
     del st.session_state.ingested_files[filename]
-    
-    if successful_deletes == total:
-         return True, f"Successfully deleted {filename} ({total} vectors)."
-    else:
-         return True, f"Deleted {filename} (Removed {successful_deletes}/{total} vectors)."
+    return True, f"Removed {success_count}/{len(vector_ids)} chunks."
 
 # ---------------------------------------------------------
-# Main UI
+# Application UI
 # ---------------------------------------------------------
+
 st.title("🤖 Gemini AI PDF Search + Endee Vector DB")
 
-# Connection Status (Error only)
 if "Error" in init_status:
-    st.error(f"📡 {init_status}")
-    st.warning("⚠️ **Database Offline**: Please check your `ENDEE_URL` and ensures the server is running.")
+    st.error(f"📡 Connection Status: {init_status}")
+    st.warning("⚠️ Ensure your Endee server is reachable at the configured URL.")
 
-tab1, tab2 = st.tabs(["Search & Chat", "Upload Data"])
+tab_search, tab_upload = st.tabs(["Search & Chat", "Upload Documents"])
 
-with tab2:
-    st.markdown("### Upload PDF Documents")
-    st.write("Upload PDF files. They will be embedded via the **Gemini API** and stored inside **Endee**.")
+with tab_upload:
+    st.markdown("### 📄 Upload Documents")
+    st.write("Upload PDF files to build your searchable knowledge base.")
     
     uploaded_files = st.file_uploader("Choose PDF files", accept_multiple_files=True, type=['pdf'])
     
-    if st.button("Ingest into Endee", type="primary"):
+    if st.button("Ingest Documents", type="primary"):
         if not uploaded_files:
-            st.warning("Please upload at least one file.")
+            st.warning("Please select at least one PDF.")
         else:
-            with st.spinner("Processing files..."):
+            with st.spinner("Processing documents..."):
                 for uploaded_file in uploaded_files:
                     filename = uploaded_file.name
-                    ext = filename.split('.')[-1].lower()
-                    
-                    # Save to tempfile
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                         tmp.write(uploaded_file.getvalue())
                         tmp_path = tmp.name
                         
                     try:
-                        if ext == 'pdf':
-                            st.write(f"🔄 Processing PDF: {filename}...")
-                            doc = fitz.open(tmp_path)
-                            text = ""
-                            for page in doc:
-                                text += page.get_text() + "\n"
-                            
-                            chunks = chunk_text(text)
-                            if not chunks:
-                                st.warning(f"⚠️ {filename} appears to be empty or unscannable.")
-                                continue
+                        st.write(f"🔍 Analyzing: {filename}...")
+                        doc = fitz.open(tmp_path)
+                        text = "".join([page.get_text() + "\n" for page in doc])
+                        
+                        chunks = chunk_text(text)
+                        if not chunks:
+                            st.warning(f"⚠️ {filename} is empty.")
+                            continue
 
-                            st.write(f"⏳ Generating batch embeddings for {len(chunks)} chunks...")
-                            embeddings = get_embeddings_batch(chunks)
-                            payloads = [{"type": "pdf", "file": filename, "content": chunk} for chunk in chunks]
-                            
-                            success, msg = ingest_to_endee(embeddings, payloads, filename)
-                            
-                        elif ext in ['png', 'jpg', 'jpeg']:
-                            st.write(f"🔄 Processing Image: {filename}...")
-                            caption = analyze_image_with_gemini(tmp_path)
-                            embedding = get_embedding(caption)
-                            payloads = [{"type": "image", "file": filename, "content": caption}]
-                            
-                            success, msg = ingest_to_endee([embedding], payloads, filename)
-                            
+                        st.write(f"🧠 Generating embeddings...")
+                        embeddings = get_embeddings_batch(chunks)
+                        payloads = [{"type": "pdf", "file": filename, "content": chunk} for chunk in chunks]
+                        
+                        success, msg = ingest_to_endee(embeddings, payloads, filename)
                         if success:
                             st.success(f"✅ {filename}: {msg}")
                         else:
                             st.error(f"❌ {filename}: {msg}")
-                            
                     finally:
-                        os.unlink(tmp_path)
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
     
     st.markdown("---")
-    st.markdown("### Manage Ingested Files")
+    st.markdown("### 📋 Manage Files")
     if not st.session_state.ingested_files:
-        st.info("No files currently tracked in this session.")
+        st.info("No files in the current index yet.")
     else:
         for fname in list(st.session_state.ingested_files.keys()):
-            colA, colB = st.columns([4, 1])
-            with colA:
+            col_name, col_del = st.columns([4, 1])
+            with col_name:
                 st.write(f"📄 **{fname}** ({len(st.session_state.ingested_files[fname])} chunks)")
-            with colB:
+            with col_del:
                 if st.button("Delete", key=f"del_{fname}"):
-                    with st.spinner(f"Deleting {fname}..."):
+                    with st.spinner("Deleting..."):
                         succ, msg = delete_file_from_endee(fname)
-                        if succ:
-                            st.success(msg)
-                            st.rerun() # Refresh the UI dynamically
-                        else:
-                            st.error(msg)
+                        st.rerun()
                             
     st.markdown("---")
-    st.markdown("### Danger Zone")
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        if st.button("🗑️ Deep Reset Database", type="secondary", help="Wipes all data and metadata. Use this to fix 400/500 errors."):
-            with st.spinner("Resetting..."):
-                url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete"
-                try:
-                    res = requests.delete(url, headers=HEADERS, timeout=30)
-                    st.cache_resource.clear()
-                    st.session_state.ingested_files = {} 
-                    init_endee(INDEX_NAME, DIMENSION)
-                    st.success("Database wiped and reset!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
+    st.markdown("### ⚠️ Danger Zone")
+    if st.button("🗑️ Reset Entire Database", type="secondary", help="Irreversible: wipes all stored data."):
+        with st.spinner("Clearing everything..."):
+            try:
+                requests.delete(f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/delete", headers=HEADERS, timeout=30)
+                st.cache_resource.clear()
+                st.session_state.ingested_files = {} 
+                init_endee(INDEX_NAME, DIMENSION)
+                st.success("Database fully reset.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Reset failed: {e}")
 
-with tab1:
-    st.markdown("### Ask a Question")
-    
-    query_text = st.text_input("Enter your query:", placeholder="e.g. What is the significance of the brain diagram?")
+with tab_search:
+    st.markdown("### 🔍 Semantic Ask")
+    query_text = st.text_input("Ask a question about your documents:", placeholder="e.g. What is the main conclusion of the report?")
     
     if st.button("Search", type="primary"):
         if not query_text.strip():
-            st.warning("Please enter a query.")
+            st.warning("Please enter a question.")
         else:
-            with st.spinner("Searching Endee and reasoning with Gemini..."):
+            with st.spinner("Thinking..."):
                 query_embedding = get_embedding(query_text)
                 
-                if not query_embedding:
-                    st.error("Failed to embed query. Check your API key.")
-                else:
+                if query_embedding:
                     url = f"{ENDEE_URL}/api/v1/index/{INDEX_NAME}/search"
                     payload = {"k": 3, "vector": query_embedding}
                     
                     try:
-                        # Increased timeout to 30s
                         response = requests.post(url, json=payload, headers=HEADERS, timeout=30)
                         if response.status_code == 200:
-                            unpacked_data = msgpack.unpackb(response.content, raw=False)
+                            results = msgpack.unpackb(response.content, raw=False)
                             
-                            if not unpacked_data or len(unpacked_data) == 0:
-                                st.info("No relevant context found in Endee.")
+                            if not results:
+                                st.info("No matching information found.")
                             else:
-                                context_builder = ""
-                                citations = []
+                                context = ""
+                                sources = []
                                 
-                                for result in unpacked_data:
-                                    meta_data = result[2]
-                                    meta_str = meta_data.decode('utf-8') if isinstance(meta_data, bytes) else meta_data
-                                    score = result[0] if len(result) > 0 else 0.0
-                                    
+                                for r in results:
+                                    # result: [distance, id, meta, ...]
+                                    raw_meta = r[2]
+                                    meta_str = raw_meta.decode('utf-8') if isinstance(raw_meta, bytes) else raw_meta
                                     try:
                                         meta = json.loads(meta_str)
-                                        content = meta.get('content', meta_str)
-                                        filename = meta.get('file', 'Unknown')
-                                        dtype = meta.get('type', 'Unknown')
+                                        content = meta.get('content', 'No content')
+                                        fname = meta.get('file', 'Unknown')
                                     except:
-                                        content = meta_str
-                                        filename = "Unknown"
-                                        dtype = "Unknown"
+                                        content, fname = meta_str, "Unknown"
                                         
-                                    context_builder += f"\n--- Source: {filename} ({dtype}) ---\n{content}\n"
-                                    citations.append({
-                                        "score": score,
-                                        "file": filename,
-                                        "type": dtype,
-                                        "content": content
-                                    })
+                                    context += f"\nSOURCE [{fname}]:\n{content}\n"
+                                    sources.append({"name": fname, "score": r[0], "text": content})
                                 
-                                # Generate RAG
-                                answer = generate_rag_response(query_text, context_builder)
+                                answer = generate_rag_response(query_text, context)
                                 
-                                st.markdown("### 🧠 AI Response")
-                                st.markdown(f"> {answer}")
+                                st.markdown("#### 🧠 Answer")
+                                st.write(answer)
                                 
                                 st.markdown("---")
-                                st.markdown("### 📚 Retrieved Citations")
-                                for i, cit in enumerate(citations):
-                                    with st.expander(f"[{cit['score']:.4f}] {cit['file']} ({cit['type']})"):
-                                        st.write(cit['content'])
-                                        
+                                st.markdown("#### 📚 Reference Chunks")
+                                for s in sources:
+                                    with st.expander(f"📄 {s['name']} (Similarity: {s['score']:.4f})"):
+                                        st.write(s['text'])
                         else:
-                            st.error(f"Endee Search failed: {response.text}")
+                            st.error("Search engine returned an error.")
                     except Exception as e:
-                        st.error(f"Error connecting to Endee: {e}")
+                        st.error(f"Search failed: {e}")
