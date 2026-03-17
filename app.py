@@ -135,10 +135,11 @@ def get_embedding(text):
 def generate_rag_response(query, context):
     """
     Uses Gemini to reason about the retrieved context and provide an answer.
+    Includes retry logic for transient quota errors.
     """
-    try:
-        model = genai.GenerativeModel('models/gemini-2.0-flash')
-        prompt = f"""You are a helpful AI assistant. 
+    import time
+    model = genai.GenerativeModel('models/gemini-2.0-flash')
+    prompt = f"""You are a helpful AI assistant. 
 Answer the user question based ONLY on the provided Context. 
 If the information is missing, clearly state that the documents do not contain the answer.
 
@@ -147,15 +148,24 @@ Context:
 
 User Question: {query}
 """
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        err_msg = str(e).lower()
-        if "quota" in err_msg:
-            st.error("🚨 **QUOTA EXCEEDED**: Gemini Free Tier limit reached. Please try again later.")
-        else:
-            st.error(f"Reasoning error: {e}")
-        return "I apologize, but I encountered an error while processing your request."
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "quota" in err_msg or "429" in err_msg or "resource" in err_msg:
+                if attempt < max_retries - 1:
+                    st.info(f"⏳ Rate limited. Retrying in {5 * (attempt + 1)}s... ({attempt + 1}/{max_retries})")
+                    time.sleep(5 * (attempt + 1))
+                else:
+                    st.warning("⚠️ **Rate limit reached.** Showing raw search results below instead of AI answer.")
+                    return None
+            else:
+                st.error(f"Reasoning error: {e}")
+                return None
+    return None
 
 # ---------------------------------------------------------
 # Document Ingestion
@@ -366,13 +376,17 @@ with tab_search:
                                 
                                 answer = generate_rag_response(query_text, context)
                                 
-                                st.markdown("#### 🧠 Answer")
-                                st.write(answer)
+                                if answer:
+                                    st.markdown("#### 🧠 Answer")
+                                    st.write(answer)
+                                else:
+                                    st.markdown("#### 📖 Relevant Content Found")
+                                    st.info("AI summary unavailable due to rate limits. Here are the matching passages:")
                                 
                                 st.markdown("---")
                                 st.markdown("#### 📚 Reference Chunks")
                                 for s in sources:
-                                    with st.expander(f"📄 {s['name']} (Similarity: {s['score']:.4f})"):
+                                    with st.expander(f"📄 {s['name']} (Similarity: {s['score']:.4f})", expanded=(answer is None)):
                                         st.write(s['text'])
                         else:
                             st.error("Search engine returned an error.")
